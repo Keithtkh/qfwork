@@ -170,6 +170,63 @@ function trialStats() {
   return { total: codes.size, used };
 }
 
+// ── one-time trial codes issued-email list ────────────────────────────────────
+// The issued-email list is state, so it is written to disk 
+// — the list itself stays in the environment.
+//
+// Issue a batch with:
+//   node -e "for(let i=0;i<25;i++)console.log('QFWORK-TRIAL-'+require('crypto').randomBytes(3).toString('hex'))"
+// and paste them into ACCESS_CODES_TRIAL, comma separated.
+//
+// Get a code from issued list (different from issued-email list)
+// Assign a code for a given email.
+// Same email → same code. 
+// New email → next unused code.
+
+let issuedTo = new Map();
+
+const ISSUED_FILE = process.env.TRIAL_CODES_ISSUED_STATE || path.join(__dirname, 'trial-codes-issued.json');
+function loadIssued() {
+  try {
+    const obj = JSON.parse(fs.readFileSync(ISSUED_FILE, 'utf8'));
+    issuedTo = new Map(Object.entries(obj));
+  } catch (e) {
+    issuedTo = new Map();
+  }
+}
+
+function saveIssued() {
+  try {
+    const tmp = ISSUED_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(Object.fromEntries(issuedTo), null, 2));
+    fs.renameSync(tmp, ISSUED_FILE);
+  } catch (e) {
+    if (!saveIssued.warned) {
+      saveIssued.warned = true;
+      console.warn(`[access] cannot write ${ISSUED_FILE} (${e.code || e.message}) — issued-code map will reset on restart`);
+    }
+  }
+}
+loadIssued();
+
+function issueCode(email) {
+  if (!email) return null;
+
+  // Already issued to this email? Return the same code.
+  if (issuedTo.has(email)) return issuedTo.get(email);
+
+  // Find a code not yet issued to anyone.
+  const codes = trialCodes();
+  for (const c of codes) {
+    const alreadyIssued = Array.from(issuedTo.values()).includes(c);
+    if (!alreadyIssued) {
+      issuedTo.set(email, c);
+      saveIssued();      // writes trial-codes-issued.json
+      return c;
+    }
+  }
+  return null;
+}
 
 // ── code check ──────────────────────────────────────────────
 // Returns { tier, code } or null. Case- and whitespace-insensitive, so a code
@@ -343,6 +400,7 @@ module.exports = {
   runCap,
   callSeconds,
   redactForTier,
+  issueCode,
   LOCKED_SECTIONS,
   UNLIMITED
 };

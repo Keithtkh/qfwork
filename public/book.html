@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Booking — QFwork.ai</title>
+  <link rel="icon" href="logo-mark.png" />
+  <style>
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #f6f8fa;
+      color: #101828;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      background: #fff;
+      border-bottom: 1px solid #e7eaee;
+      padding: 15px 26px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+    }
+    .header img { width: 34px; height: 34px; }
+    .header .brand { font-weight: 700; font-size: 16px; }
+    .header .brand span { color: #0d7a6f; }
+    .content {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 22px 60px;
+      flex: 1;
+    }
+    h1 {
+      font-size: 30px;
+      letter-spacing: -0.02em;
+      margin: 0 0 12px;
+    }
+    .lede {
+      color: #667085;
+      font-size: 15px;
+      line-height: 1.55;
+      margin: 0 0 28px;
+    }
+    .steps {
+      background: #fff;
+      border: 1px solid #e7eaee;
+      border-radius: 14px;
+      padding: 20px 24px;
+      margin-bottom: 28px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .steps ol { margin: 8px 0 0; padding-left: 20px; }
+    .steps li { margin: 4px 0; }
+    .calendly-inline-widget {
+      min-width: 320px;
+      height: 700px;
+      background: #fff;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid #e7eaee;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="logo-mark.png" alt="" />
+    <div class="brand">QFwork<span>.ai</span></div>
+  </div>
+
+  <div class="content">
+    <h1>Book your session</h1>
+    <p class="lede">
+      Pick a time below. After you book, you'll receive a trial code — use it to try QFwork.ai before our call.
+    </p>
+
+    <div class="steps">
+      <strong>How it works:</strong>
+      <ol>
+        <li>Book a time for consultation below.</li>
+        <li>Remember to allow the page to redirect after booking.</li>
+        <li>You'll get a trial code in the confirmation page.</li>
+        <li>Go to <a href="/exam.html">QFwork.ai</a> and enter the code.</li>
+        <li>Do your trial session (about 5 minutes).</li>
+        <li>We'll meet you at the scheduled time.</li>
+      </ol>
+    </div>
+
+        <!-- Calendly inline embed (URL loaded from .env via /api/config) -->
+    <div id="calendly-wrap"></div>
+
+    <script>
+      fetch('/api/config')
+        .then(r => r.json())
+        .then(config => {
+          const wrap = document.getElementById('calendly-wrap');
+
+          if (!config.calendlyUrl) {
+            wrap.innerHTML = '<p style="color:#667085;">Booking is not available right now.</p>';
+            return;
+          }
+
+          const div = document.createElement('div');
+          div.className = 'calendly-inline-widget';
+          div.setAttribute('data-url', config.calendlyUrl);
+          div.style.minWidth = '320px';
+          div.style.height = '700px';
+          wrap.appendChild(div);
+
+          const script = document.createElement('script');
+          script.src = 'https://assets.calendly.com/assets/external/widget.js';
+          script.async = true;
+          document.body.appendChild(script);
+        })
+        .catch(() => {
+          document.getElementById('calendly-wrap').innerHTML =
+            '<p style="color:#b42318;">Could not load booking. Please refresh or contact us.</p>';
+        });
+    </script>
+  </div>
+</body>
+</html>

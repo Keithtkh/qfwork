@@ -21,6 +21,11 @@ Thumbs.db
 trial-codes-used.json
 trial-codes-used.json.tmp
 
+# Which one-time trial codes have been issued to which email addresses. Runtime 
+# state, not config — the issued list itself lives in TRIAL_CODES_ISSUED_STATE.
+trial-codes-issued.json
+trial-codes-issued.json.tmp
+
 # Logs
 *.log
 npm-debug.log*

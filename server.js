@@ -8,6 +8,7 @@
 //  • POST /api/voice-sample/:id     → receive the mic recording (WAV) for voice analysis
 //  • POST /api/interview-feedback   → transcript + perception + voice audio → feedback report
 //  • POST /api/abandon              → best-effort end of an abandoned call (stops billing)
+//  • POST /api/issue-code           → issue a one-time trial code after a Calendly booking
 //
 //  API credentials are read from the environment here on the server and
 //  are never exposed to the browser.
@@ -384,6 +385,35 @@ app.post('/api/interview-feedback', async (req, res) => {
   }
 });
 
+// ── Issue a trial code after a Calendly booking ──
+// Called by book-confirm.html with the invitee's email.
+// Returns the next unused code, or the same code if this email
+// was already issued one.
+app.post('/api/issue-code', (req, res) => {
+  const { email, name } = req.body || {};
+
+  if (!email) {
+    return res.status(400).json({ ok: false, error: 'Missing email.' });
+  }
+
+  const code = access.issueCode(email);
+  if (!code) {
+    return res.status(503).json({
+      ok: false,
+      error: 'No trial codes available right now. Please contact qfworkai@gmail.com.'
+    });
+  }
+
+  console.log(`[booking] issued ${code} to ${email}`);
+  return res.json({ ok: true, code });
+});
+
+// Config endpoint — exposes safe-to-share config values to the frontend.
+app.get('/api/config', (req, res) => {
+  res.json({
+    calendlyUrl: process.env.CALENDLY_URL_TRIAL || ''
+  });
+});
 
 app.get('/health', (req, res) => res.json({ status: 'ok', message: 'QFwork.ai server is running' }));
 
@@ -415,6 +445,12 @@ server.listen(PORT, () => {
   console.log(process.env.CALENDLY_URL
     ? `  Booking: configured  (free-consultation link on the report)`
     : `  Booking: MISSING — set CALENDLY_URL or the consultation card stays hidden`);
+
+  // With no URL the service unavailable word is shown, so this line is 
+  // an extra place to show a missing link.
+  console.log(process.env.CALENDLY_URL_TRIAL
+    ? `  Booking_Trial  : booking link before trial configured  (/book.html)`
+    : `  Booking_Trial  : MISSING — set CALENDLY_URL_TRIAL or /book.html shows no calendar`);
 
   // The on-camera presence feedback requires each persona to carry a Raven
   // perception layer. Verify both at boot and add the layer if it is absent,

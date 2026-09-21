@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Booking confirmed — QFwork.ai</title>
+  <link rel="icon" href="logo-mark.png" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #f6f8fa;
+      color: #101828;
+      min-height: 100vh;
+    }
+    .header {
+      background: #fff;
+      border-bottom: 1px solid #e7eaee;
+      padding: 15px 26px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+    }
+    .header img { width: 34px; height: 34px; }
+    .header .brand { font-weight: 700; font-size: 16px; }
+    .header .brand span { color: #0d7a6f; }
+    .content {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 60px 22px;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e7eaee;
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 12px 32px rgba(16,24,40,.06);
+    }
+    h1 {
+      font-size: 26px;
+      letter-spacing: -0.02em;
+      margin: 0 0 10px;
+      font-weight: 600;
+    }
+    .lede {
+      color: #667085;
+      font-size: 15px;
+      line-height: 1.55;
+      margin: 0 0 24px;
+    }
+    .code-box {
+      background: #e9f6f4;
+      border: 2px dashed #0d7a6f;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      margin: 0 0 24px;
+    }
+    .code-label {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #0d7a6f;
+      margin-bottom: 8px;
+    }
+    .code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: #0d7a6f;
+      user-select: all;
+      word-break: break-all;
+    }
+    .copy-btn {
+      margin-top: 12px;
+      border: 0;
+      border-radius: 10px;
+      background: #0d7a6f;
+      color: #fff;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 10px 20px;
+      cursor: pointer;
+      transition: 0.15s;
+    }
+    .copy-btn:hover { background: #0a5f56; }
+    .copy-btn.done { background: #15803d; }
+    .steps {
+      background: #fcfdfd;
+      border: 1px solid #e7eaee;
+      border-radius: 12px;
+      padding: 18px 22px;
+      font-size: 14px;
+      line-height: 1.6;
+      margin: 0 0 24px;
+    }
+    .steps ol { margin: 8px 0 0; padding-left: 20px; }
+    .steps li { margin: 6px 0; }
+    .steps a { color: #0d7a6f; font-weight: 600; }
+    .go-btn {
+      display: inline-block;
+      background: #0d7a6f;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 12px;
+      padding: 14px 26px;
+      font-weight: 600;
+      font-size: 15px;
+      transition: 0.15s;
+    }
+    .go-btn:hover { background: #0a5f56; }
+    .error {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #b42318;
+      border-radius: 12px;
+      padding: 16px 18px;
+      line-height: 1.5;
+    }
+    .spinner {
+      width: 34px;
+      height: 34px;
+      border: 3px solid #e7eaee;
+      border-top-color: #0d7a6f;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="logo-mark.png" alt="" />
+    <div class="brand">QFwork<span>.ai</span></div>
+  </div>
+
+  <div class="content">
+    <div class="card" id="card">
+      <div class="spinner"></div>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const email  = params.get('invitee_email');
+    const name   = params.get('invitee_full_name') || 'there';
+
+    const card = document.getElementById('card');
+
+    if (!email) {
+      card.innerHTML = `
+        <h1>Hi, there</h1>
+        <p class="lede">We couldn't find your booking details. Please check whether you have booked and redirected successfully. If you believe there is an error, contact us at <a href="mailto:qfworkai@gmail.com" style="color:#0d7a6f;">qfworkai@gmail.com</a>.</p>
+        <a class="go-btn" href="/exam.html">Go back to QFwork.ai</a>
+      `;
+    } else {
+      // Fetch a trial code from the server
+      fetch('/api/issue-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name })
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (!data.ok) throw new Error(data.error || 'Could not issue a code.');
+          renderCode(data.code, name);
+          // Clean the URL after the code is successfully fetched and rendered
+          if (window.history && window.history.replaceState) {
+            // This keeps the domain and path but removes the '?invitee_email=...' part
+            const cleanUrl = window.location.pathname;
+            window.history.replaceState({}, document.title, cleanUrl);
+          }
+        })
+        .catch(err => {
+          card.innerHTML = `
+            <h1>Booking confirmed</h1>
+            <p class="lede">Thanks, ${escapeHtml(name)}. We had trouble generating your trial code automatically.</p>
+            <div class="error">${escapeHtml(err.message)}</div>
+            <p style="margin-top:16px;">Please contact us at <a href="mailto:qfworkai@gmail.com" style="color:#0d7a6f;">qfworkai@gmail.com</a>.</p>
+          `;
+        });
+    }
+
+    function renderCode(code, name) {
+      card.innerHTML = `
+        <h1>Booking confirmed ✓</h1>
+        <p class="lede">Thanks, ${escapeHtml(name)}. Here's your trial code — use it now to try QFwork.ai before our call.</p>
+
+        <div class="code-box">
+          <div class="code-label">Your trial code</div>
+          <div class="code" id="codeText">${escapeHtml(code)}</div>
+          <button class="copy-btn" id="copyBtn">Copy code</button>
+        </div>
+
+        <div class="steps">
+          <strong>How to use it</strong>
+          <ol>
+            <li>Open <a href="/exam.html">QFwork.ai</a></li>
+            <li>Pick a scenario (Job Interview, Salary Negotiation, etc.)</li>
+            <li>Paste the code above when asked</li>
+            <li>Do your trial session — it takes about 5 minutes</li>
+          </ol>
+        </div>
+
+        <a class="go-btn" href="/exam.html">Start your trial →</a>
+      `;
+
+      document.getElementById('copyBtn').addEventListener('click', () => {
+        navigator.clipboard.writeText(code).then(() => {
+          const btn = document.getElementById('copyBtn');
+          btn.textContent = 'Copied ✓';
+          btn.classList.add('done');
+          setTimeout(() => {
+            btn.textContent = 'Copy code';
+            btn.classList.remove('done');
+          }, 2000);
+        });
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+  </script>
+</body>
+</html>
