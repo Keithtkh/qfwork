@@ -547,7 +547,8 @@
       <div class="devnote">🎥 Next you'll check your camera and microphone. Your voice is recorded during the call and analysed for tone, pacing and clarity — it powers your feedback report and is discarded right after.</div>
       <button class="btn btn-primary" id="startBtn" onclick="startCall()">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
-        Set up camera &amp; mic
+        <!-- Set up camera &amp; mic -->
+         Join call
       </button>
     </div>
   </section>
@@ -610,7 +611,7 @@
     </div>
     <div class="stage">
       <span class="ai-badge">AI partner</span>
-      <iframe id="frame" allow="camera; microphone; autoplay; fullscreen; display-capture"></iframe>
+      <iframe id="frame" allow="camera; microphone; autoplay; fullscreen; display-capture"></iframe> 
     </div>
     <div class="controls">
       <span class="status"><span class="dot"></span> Live — just speak naturally, the AI listens and replies</span>
@@ -787,7 +788,7 @@ function openPrecall(s){
 // which means the call itself joins with a single click.
 let dev = { stream:null, ctx:null, raf:null };
 
-function startCall(){
+/*function startCall(){
   // Re-checked rather than assumed: the precall form can sit open long enough
   // for the session to lapse, and the device check is a poor place to find out.
   QFAccess.require(async () => {
@@ -796,6 +797,13 @@ function startCall(){
     $('dcStatus').textContent = '';
     $('joinBtn').disabled = true;
     await openDevices();
+  }, state.scenarioTitle);
+}*/
+// Skip the first check screen to prevent replication
+function startCall(){
+  QFAccess.require(async () => {
+    state.userContext = $('ctx').value;
+    await joinCall();
   }, state.scenarioTitle);
 }
 
