@@ -123,8 +123,8 @@ app.get('/api/access/verify', (req, res) => {
 const INTERVIEW_SCENARIOS = {
   "Job Interview": {
     prompt:  "A professional job interview. The interviewer asks about your background, strengths and fit, with natural follow-ups — tailored to whatever role you're pursuing.",
-    context: "You are a warm, professional interviewer running a practice job interview. Do NOT assume any particular industry or role. At the very start, briefly ask the candidate what role or field they're interviewing for, then adapt ALL of your questions to whatever they say. Open with 'tell me about yourself', then ask natural, open follow-up questions about their experience, strengths and motivation. Follow the candidate's lead, ask ONE question at a time, and keep each turn to 1-3 sentences. Never give feedback or scores during the interview.",
-    greeting: "Hi, great to meet you — thanks for coming in. Before we dive in, what role or field are you interviewing for today?"
+    context: "You are a warm, professional interviewer running a practice job interview. The candidate should have described a particular role and company they are applying for. At the very start, briefly ask the candidate to introduce themselves instead of asking about the role or company they are applying for unless they did not mention it, then adapt ALL of your questions to whatever they say and based on the role that they are applying for. Ask natural, open follow-up questions about their experience, strengths and motivation. Follow the candidate's lead, ask ONE question at a time, and keep each turn to 1-3 sentences. Never give feedback or scores during the interview. Ensure it is a competency based interview.",
+    greeting: "Hi, great to meet you — thanks for coming in. Before we dive in, could you tell me a bit about yourself?"
   },
   "Salary Negotiation": {
     prompt:  "A salary negotiation. You've received a job offer and are negotiating the package.",
@@ -190,10 +190,10 @@ app.post('/api/conversation', async (req, res) => {
       code:  'trial-spent'
     });
   }
-  // Optionally tailor the role-play to whatever the user told us about themselves.
+  // Tailor the role-play to whatever the user told us about themselves.
   let context = scenario.context;
   if (userContext && userContext.trim()) {
-    context += `\n\nThe candidate shared this about their situation — use it to tailor the conversation and do NOT ask again: "${userContext.trim().slice(0, 500)}"`;
+    context += `\n\nThe candidate shared about the role and company that they are applying for, use it to tailor the conversation and do NOT ask the company and the role they are applying for again: "${userContext.trim().slice(0, 500)}"`;
   }
   // Scenario-specific persona (e.g. the patient presentation executive).
   // Falls back to the default interviewer persona if the env var isn't set.
