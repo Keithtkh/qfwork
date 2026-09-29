@@ -171,11 +171,15 @@ app.post('/api/analyze', async (req, res) => {
 // POST /api/conversation  — start a live Tavus video interview
 //   body: { scenarioTitle }
 //   returns: { conversationId, conversationUrl, scenarioPrompt }
+//
+// cv text (if available) is stored in memory for the duration of the call, then passed to the feedback generator at the end. It is never written to disk or logged.
 // ============================================================
+const cvStore = new Map(); // conversationId → cvText
+
 app.post('/api/conversation', async (req, res) => {
   const session = access.requireSession(req, res);
   if (!session) return;
-  const { scenarioTitle, userContext } = req.body;
+  const { scenarioTitle, userContext, cvText } = req.body;
   const scenario = INTERVIEW_SCENARIOS[scenarioTitle];
   if (!scenario) {
     return res.status(400).json({ error: `Unknown scenario: ${scenarioTitle}` });
@@ -195,6 +199,11 @@ app.post('/api/conversation', async (req, res) => {
   if (userContext && userContext.trim()) {
     context += `\n\nThe candidate shared about the role and company that they are applying for, use it to tailor the conversation and do NOT ask the company and the role they are applying for again: "${userContext.trim().slice(0, 500)}"`;
   }
+  // If the candidate uploaded a CV, pass it to the Tavus replica so it can
+  // ask questions about specific roles, projects, skills, or transitions mentioned in the CV.
+  if (cvText && cvText.trim()) {
+    context += `\n\nThe candidate has uploaded their CV. Use it to tailor your questions — ask about specific roles, projects, skills, or transitions mentioned in the CV. Do NOT read the CV back verbatim or ask them to summarise it. CV content:\n"""\n${cvText.trim().slice(0, 5000)}\n"""`;
+  }
   // Scenario-specific persona (e.g. the patient presentation executive).
   // Falls back to the default interviewer persona if the env var isn't set.
   const personaId = scenario.personaIdEnv ? (process.env[scenario.personaIdEnv] || undefined) : undefined;
@@ -210,6 +219,10 @@ app.post('/api/conversation', async (req, res) => {
       personaId,
       maxSeconds
     });
+    // Store the CV text in memory for the duration of the call, so it can be passed to the feedback generator at the end. It is never written to disk or logged.
+    if (cvText && cvText.trim()) {
+      cvStore.set(convo.conversation_id, cvText.trim().slice(0, 5000));
+    }
     return res.status(200).json({
       conversationId:  convo.conversation_id,
       conversationUrl: convo.conversation_url,
@@ -356,15 +369,23 @@ app.post('/api/interview-feedback', async (req, res) => {
       console.log(`[voice] no sample for this call; feedback will use transcript and perception only`);
     }
 
+    // cv data in cvStore is deleted after passing it to the feedback generator, so it is never logged or written to disk.
+    const cv = cvStore.get(conversationId) || '';
+    cvStore.delete(conversationId);
+
     const feedback = await generateFeedback({
       transcript:         result.userText,
       scenarioTitle,
       scenarioPrompt:     scenario.prompt,
       visualObservations: result.perception,   // real camera observations (Raven perception)
       pacing,
-      voiceMetrics
+      voiceMetrics,
+      cvText:             cv                   // cv is passed to the feedback generator 
     });
     console.log(`[feedback] fields - presence: ${feedback.presenceFeedback ? `yes (${feedback.presenceFeedback.length} chars)` : 'EMPTY'}, presencePoints: ${Array.isArray(feedback.presencePoints) ? feedback.presencePoints.filter(Boolean).length : 0}, voice: ${feedback.voiceAnalysis?.toneIntonation ? 'yes' : 'EMPTY'}, pacing: ${feedback.deliveryAnalysis?.pacingFlow ? 'yes' : 'EMPTY'}`);
+    // Keep the full feedback JSON in the server logs, in case users accidentally delete their report before downloading it
+    console.log(`[report] ${conversationId} — ${scenarioTitle} — score ${feedback.overallScore}`);
+    console.log('[report-full]', JSON.stringify(feedback));
 
     // On the sales tier the deep coaching sections are stripped out here, so
     // they never reach the browser at all — the client shows a locked card and
@@ -385,10 +406,16 @@ app.post('/api/interview-feedback', async (req, res) => {
   }
 });
 
-// ── Issue a trial code after a Calendly booking ──
+// ============================================================
+// POST /api/issue-code  — Issue a trial code after a Calendly booking
 // Called by book-confirm.html with the invitee's email.
 // Returns the next unused code, or the same code if this email
 // was already issued one.
+// 
+// This Calendly booking is the one occurs before the trial session for new users
+// Calendly booking at the feedback report session can be added if needed
+// ============================================================
+
 app.post('/api/issue-code', (req, res) => {
   const { email, name } = req.body || {};
 

@@ -13,6 +13,9 @@
      modal when a visitor picks a scenario. The server enforces the real
      restriction — every token-spending endpoint requires the session. -->
 <script src="access-gate.js"></script>
+<!-- CV parsers -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <style>
   :root{
     --teal:#0d7a6f; --teal-d:#0a5f56; --orange:#ef6a3d;
@@ -540,9 +543,15 @@
         <div class="brief-chips" id="pcBriefChips"></div>
       </div>
 
-      <label class="fld" for="ctx">Add your job description and company that you're applying to <span>(please fill in)</span></label>
-      <textarea id="ctx" placeholder="e.g. I'm a nurse applying to a hospital in Hong Kong · or · I work in logistics and want to present a delivery-time project"></textarea>
-      <p class="ex">Don't leave it blank, otherwise the AI will need to ask you at the start.</p>
+      <label class="fld" for="ctx" id="ctxLabel">Your context</label>
+      <textarea id="ctx" placeholder=""></textarea>
+      <p class="ex" style="margin-bottom: 18px;" id="ctxHint">Please fill this in so the AI can tailor the conversation.</p>
+
+      <div id="cvBlock">
+        <label class="fld" for="cvFile" id="cvLabel">Upload your CV <span>(optional — .pdf, .doc, .docx, .txt, or .md)</span></label>
+        <input type="file" id="cvFile" accept=".pdf,.doc,.docx,.txt,.md" />
+        <p class="ex">Your CV is used only for this session. It is never stored or shared. The AI will tailor its questions to your CV, and your report will assess how well you used it.</p>
+      </div>
 
       <div class="devnote">🎥 Next you'll check your camera and microphone. Your voice is recorded during the call and analysed for tone, pacing and clarity — it powers your feedback report and is discarded right after.</div>
       <button class="btn btn-primary" id="startBtn" onclick="startCall()">
@@ -635,6 +644,9 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
 
 // scenario metadata (display only; the server holds the role-play logic)
 const ICONS = {
@@ -643,17 +655,50 @@ const ICONS = {
   present:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h18M4 4v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4M9 20l3-3 3 3"/></svg>',
   people:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>'
 };
+// Different labels in the pre-call screen for each scenario
 const SCENARIOS = [
-  { title:"Job Interview",         icon:'brief',   blurb:"Field your background, strengths and fit — for whatever role you're chasing." },
-  { title:"Salary Negotiation",    icon:'money',   blurb:"You've got the offer. Negotiate the package with a manager who pushes back." },
-  { title:"Business Presentation", icon:'present',
-    blurb:"Hold the floor: brief a busy executive, present uninterrupted, then defend your points in Q&A.",
-    briefs:[
+  {
+    title: "Job Interview",
+    icon: 'brief',
+    blurb: "Field your background, strengths and fit — for whatever role you're chasing.",
+    ctxLabel: "Your job description and target company",
+    ctxPlaceholder: "e.g. I'm applying for a Product Manager role at HSBC in Hong Kong.",
+    ctxRequired: true,
+    showCv: true,
+    cvLabel: "Upload your CV",
+  },
+  {
+    title: "Salary Negotiation",
+    icon: 'money',
+    blurb: "You've got the offer. Negotiate the package with a manager who pushes back.",
+    ctxLabel: "Your role and the offer you received",
+    ctxPlaceholder: "e.g. Senior Engineer at a startup, offered HKD 65k/month. I want to negotiate up.",
+    ctxRequired: true,
+    showCv: false,
+  },
+  {
+    title: "Business Presentation",
+    icon: 'present',
+    blurb: "Hold the floor: brief a busy executive, present uninterrupted, then defend your points in Q&A.",
+    ctxLabel: "What you're presenting",
+    ctxPlaceholder: "e.g. Q3 results and a proposed budget increase for the engineering team.",
+    ctxRequired: true,
+    showCv: false,
+    briefs: [
       "Pitch a budget increase for your team to a sceptical executive",
       "Present last quarter's results and what you'd change next quarter",
       "Propose a new tool or process and make the business case"
-    ] },
-  { title:"Client Meeting",        icon:'people',  blurb:"A first meeting with a prospective client or partner about working together." },
+    ]
+  },
+  {
+    title: "Client Meeting",
+    icon: 'people',
+    blurb: "A first meeting with a prospective client or partner about working together.",
+    ctxLabel: "Who you're meeting and why",
+    ctxPlaceholder: "e.g. First call with a logistics company in Singapore about a potential partnership.",
+    ctxRequired: true,
+    showCv: false,
+  },
 ];
 
 let state = { scenarioTitle:null, conversationId:null, scenarioPrompt:'', seconds:0, timer:null };
@@ -765,8 +810,23 @@ function openPrecall(s){
   $('pcTitle').textContent = s.title;
   $('pcBrief').textContent = s.blurb;
   $('ctx').value = '';
-  // Scenario-specific topic briefs (currently: Business Presentation) —
-  // one click drops the brief into the context box, still fully editable.
+
+  // ── Per-scenario context label, placeholder, and hint ──
+  $('ctxLabel').innerHTML = (s.ctxLabel || 'Your context') +
+    (s.ctxRequired ? ' <span>(please fill in)</span>' : ' <span>(optional)</span>');
+  $('ctx').placeholder = s.ctxPlaceholder || '';
+  $('ctxHint').textContent = s.ctxRequired
+    ? "Please fill this in so the AI can tailor the conversation."
+    : "Optional — leave it blank and the AI will ask at the start.";
+
+  // ── Show or hide the CV upload ──
+  $('cvBlock').style.display = s.showCv ? '' : 'none';
+  if (s.showCv) {
+    $('cvLabel').innerHTML = (s.cvLabel || 'Upload your CV') +
+      ' <span>(optional — .pdf, .doc, .docx, .txt, or .md)</span>';
+  }
+
+  // ── Scenario-specific topic briefs ──
   if (Array.isArray(s.briefs) && s.briefs.length){
     $('pcBriefChips').innerHTML = s.briefs.map((b,i) =>
       `<button type="button" class="brief-chip" data-b="${i}">${b}</button>`).join('');
@@ -779,9 +839,47 @@ function openPrecall(s){
   } else {
     $('pcBriefs').style.display = 'none';
   }
+
+  // Reset any previous file selection
+  $('cvFile').value = '';
+
   show('precall');
 }
 
+// ── CV Text Extraction ─────────────────────────────────────
+// Extract the text from a CV file (PDF, Word, or plain text). Returns a string of the text.
+
+async function extractCvText(file) {
+  const name = file.name.toLowerCase();
+
+  if (name.endsWith('.txt') || name.endsWith('.md')) {
+    return await file.text();
+  }
+
+  if (name.endsWith('.pdf')) {
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    let text = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(item => item.str).join(' ') + '\n';
+    }
+    return text;
+  }
+
+  if (name.endsWith('.docx') || name.endsWith('.doc')) {
+    const buf = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer: buf });
+    return result.value;
+  }
+
+  throw new Error('Unsupported file type.');
+}
+
+// The bounded region below is the device check part, since tavus has a built-in
+// one, this one is skipped to avoid duplication.
+// **************************
 // ── device check (free) ─────────────────────────────────────
 // No Tavus conversation exists during this step, so the user can spend as
 // long as they like here. It also grants camera/mic permission up front,
@@ -800,9 +898,42 @@ let dev = { stream:null, ctx:null, raf:null };
   }, state.scenarioTitle);
 }*/
 // Skip the first check screen to prevent replication
+// **************************
+
+// CV is read if it exists
 function startCall(){
   QFAccess.require(async () => {
     state.userContext = $('ctx').value;
+
+    if (current && current.ctxRequired && !state.userContext.trim()) {
+      $('ctx').focus();
+      $('ctx').style.borderColor = '#dc2626';
+      $('ctxHint').textContent = 'This field is required for this scenario.';
+      $('ctxHint').style.color = '#dc2626';
+      return;
+    }
+    $('ctx').style.borderColor = '';
+    $('ctxHint').style.color = '';
+
+    // Read the CV if one was chosen
+    state.cvText = '';
+    const file = $('cvFile').files[0];
+    if (file) {
+      try {
+        const text = await extractCvText(file);
+        if (!text.trim()) {
+          console.warn('CV file returned empty text (possibly a scanned PDF).');
+          state.cvText = '';
+        } else {
+          state.cvText = text.slice(0, 5000);
+          console.log('CV extracted:', state.cvText.length, 'chars');
+        }
+      } catch (e) {
+        console.warn('Could not read CV:', e);
+        state.cvText = '';
+      }
+    }
+
     await joinCall();
   }, state.scenarioTitle);
 }
@@ -900,7 +1031,7 @@ async function joinCall(){
   try{
     const r = await fetch('/api/conversation', {
       method:'POST', headers:{'Content-Type':'application/json', ...QFAccess.headers()},
-      body: JSON.stringify({ scenarioTitle: state.scenarioTitle, userContext: state.userContext || '' })
+      body: JSON.stringify({scenarioTitle: state.scenarioTitle, userContext: state.userContext || '', cvText: state.cvText || ''})
     });
     const data = await r.json();
     if(r.status === 401) return QFAccess.expired();

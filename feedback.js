@@ -49,7 +49,7 @@ Reward warmth balanced with clarity and a two-sided value story. A confident int
 
 // ── Core: transcript + scenario → structured feedback JSON ──────────────
 // Returns the parsed feedback object, or throws an Error.
-async function generateFeedback({ transcript, scenarioTitle, scenarioPrompt, visualObservations, pacing, voiceMetrics }) {
+async function generateFeedback({ transcript, scenarioTitle, scenarioPrompt, visualObservations, pacing, voiceMetrics, cvText }) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error('GROQ_API_KEY is not set on the server.');
 
@@ -71,6 +71,7 @@ ${voiceLines ? `REAL VOICE AUDIO MEASUREMENTS — the candidate's microphone aud
 Use these figures to write the four "voiceAnalysis" fields — cite the actual numbers, tie them to the scenario, and give one concrete fix per dimension where warranted. Let them ALSO inform the clarity score (measured clarity) and confidence score (vocal energy, intonation, hesitations). Do NOT invent any acoustic detail beyond what is measured — e.g. never comment on accent.\n` : ''}
 ${visualObservations ? `REAL VISUAL OBSERVATIONS — you ALSO have GENUINE observations of the candidate from their CAMERA during this conversation, captured by a vision model that was asked specific questions about eye contact, facial expression, body language, confidence/composure and engagement. They are provided in the user message under "VISUAL OBSERVATIONS". Unlike the transcript, these are REAL observations — NOT inferred from text. Build the on-camera "presence" assessment using ONLY these observations. Do NOT invent any visual detail beyond what is given, and do NOT comment on physical appearance (clothing, skin, hair, glasses) — only communication-relevant presence (eye contact, expression, posture, gestures, composure, engagement).\n` : ''}
 ${pacing ? `PACING DATA — the user message includes REAL measured counts (total words the candidate spoke, number of answers/turns, average words per answer, and total conversation length in seconds). Use these for an HONEST pacing-and-flow assessment: were their answers concise or rambling, did they speak in full developed sentences, how much of the conversation did they actually fill. You MAY cite these approximate figures.${voiceLines ? '' : ' You must NOT invent a precise words-per-minute, pause durations, or silence/hesitation timings — that acoustic data is NOT available to you.'}\n` : ''}
+${cvText ? `CV ALIGNMENT — the candidate uploaded a CV. Assess whether their spoken answers were consistent with and supported by their CV. Note any gaps, over-claims, or missed opportunities to draw on their own experience. Reference CV details by name where relevant.\n` : ''}
 ${rubric ? `SCENARIO-SPECIFIC EXPERT RUBRIC — weigh this HEAVILY. The four scores and all written feedback must reflect how well the speaker performed against THIS rubric, not just their general English:${rubric}\n` : ''}
 SCORING CALIBRATION — use the FULL 0-100 range and produce SPECIFIC numbers (e.g. 47, 63, 81 — NOT just multiples of 10):
 - 0-30:  Severely deficient. Incoherent, off-topic, or fails the scenario's core task.
@@ -138,6 +139,7 @@ Respond with ONLY a raw JSON object. No markdown fences, no text before or after
   const userMessage =
     `SCENARIO: ${scenarioTitle}\n` +
     `PROMPT THE SPEAKER WAS RESPONDING TO: "${scenarioPrompt}"\n\n` +
+    (cvText ? `THE CANDIDATE'S CV (uploaded by them):\n"""\n${cvText}\n"""\n\n` : '') +
     `THE SPEAKER'S SPOKEN RESPONSE (raw speech-to-text transcript):\n"${transcript}"\n\n` +
     (voiceLines ? `VOICE MEASUREMENTS (real, from the recorded microphone audio):\n${voiceLines.map(l => `- ${l}`).join('\n')}\n\n` : '') +
     (visualObservations ? `VISUAL OBSERVATIONS (real, from the camera during the call):\n"${visualObservations}"\n\n` : '') +
