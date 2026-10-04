@@ -433,7 +433,7 @@ async function sendTrialCodeEmail(toEmail, trialCode) {
           <p style="font-size: 24px; font-weight: bold; letter-spacing: 2px; background: #e9f6f4; padding: 12px; border-radius: 8px; text-align: center;">
             ${trialCode}
           </p>
-          <p>Use it at <a href="https://your-site.com/exam.html">QFwork.ai</a> to start your trial session.</p>
+          <p>Use it at <a href="https://qfwork.onrender.com/exam.html">QFwork.ai</a> to start your trial session.</p>
           <p style="color: #667085; font-size: 13px; margin-top: 24px;">This code is unique to you and can only be used once.</p>
         </div>
       `,
