@@ -147,79 +147,42 @@
 
   <script>
     const params = new URLSearchParams(location.search);
-    const email  = params.get('invitee_email');
-    const name   = params.get('invitee_full_name') || 'there';
+    const email = params.get('invitee_email');
+    const name  = params.get('invitee_full_name') || 'there';
 
     const card = document.getElementById('card');
 
     if (!email) {
       card.innerHTML = `
-        <h1>Hi, there</h1>
-        <p class="lede">We couldn't find your booking details. Please check whether you have booked and redirected successfully. If you believe there is an error, contact us at <a href="mailto:qfworkai@gmail.com" style="color:#0d7a6f;">qfworkai@gmail.com</a>.</p>
-        <a class="go-btn" href="/exam.html">Go back to QFwork.ai</a>
+        <h1>Welcome</h1>
+        <p class="lede">We couldn't find your booking details. If you just booked, please check your email for the trial code.</p>
+        <a class="go-btn" href="/exam.html">Go to QFwork.ai</a>
       `;
     } else {
-      // Fetch a trial code from the server
+      // Send the email to the server, which will generate and email the code
       fetch('/api/issue-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, name })
       })
-        .then(r => r.json())
-        .then(data => {
-          if (!data.ok) throw new Error(data.error || 'Could not issue a code.');
-          renderCode(data.code, name);
-          // Clean the URL after the code is successfully fetched and rendered
-          if (window.history && window.history.replaceState) {
-            // This keeps the domain and path but removes the '?invitee_email=...' part
-            const cleanUrl = window.location.pathname;
-            window.history.replaceState({}, document.title, cleanUrl);
-          }
-        })
-        .catch(err => {
-          card.innerHTML = `
-            <h1>Booking confirmed</h1>
-            <p class="lede">Thanks, ${escapeHtml(name)}. We had trouble generating your trial code automatically.</p>
-            <div class="error">${escapeHtml(err.message)}</div>
-            <p style="margin-top:16px;">Please contact us at <a href="mailto:qfworkai@gmail.com" style="color:#0d7a6f;">qfworkai@gmail.com</a>.</p>
-          `;
-        });
-    }
-
-    function renderCode(code, name) {
-      card.innerHTML = `
-        <h1>Booking confirmed ✓</h1>
-        <p class="lede">Thanks, ${escapeHtml(name)}. Here's your trial code — use it now to try QFwork.ai before our call.</p>
-
-        <div class="code-box">
-          <div class="code-label">Your trial code</div>
-          <div class="code" id="codeText">${escapeHtml(code)}</div>
-          <button class="copy-btn" id="copyBtn">Copy code</button>
-        </div>
-
-        <div class="steps">
-          <strong>How to use it</strong>
-          <ol>
-            <li>Open <a href="/exam.html">QFwork.ai</a></li>
-            <li>Pick a scenario (Job Interview, Salary Negotiation, etc.)</li>
-            <li>Paste the code above when asked</li>
-            <li>Do your trial session — it takes about 5 minutes</li>
-          </ol>
-        </div>
-
-        <a class="go-btn" href="/exam.html">Start your trial →</a>
-      `;
-
-      document.getElementById('copyBtn').addEventListener('click', () => {
-        navigator.clipboard.writeText(code).then(() => {
-          const btn = document.getElementById('copyBtn');
-          btn.textContent = 'Copied ✓';
-          btn.classList.add('done');
-          setTimeout(() => {
-            btn.textContent = 'Copy code';
-            btn.classList.remove('done');
-          }, 2000);
-        });
+      .then(r => r.json())
+      .then(data => {
+        if (!data.ok) throw new Error(data.error || 'Could not send code.');
+        card.innerHTML = `
+          <h1>Booking confirmed ✓</h1>
+          <p class="lede">Thanks, <strong>${escapeHtml(name)}</strong>.</p>
+          <p class="lede">We've sent your unique trial code to <strong>${escapeHtml(email)}</strong>.</p>
+          <p class="lede" style="color:#667085;">Check your inbox (and spam folder) for the code, then use it to start your trial session.</p>
+          <a class="go-btn" href="/exam.html">Go to QFwork.ai</a>
+        `;
+      })
+      .catch(err => {
+        card.innerHTML = `
+          <h1>Booking confirmed</h1>
+          <p class="lede">Thanks, ${escapeHtml(name)}. We had trouble sending your trial code automatically.</p>
+          <div class="error">${escapeHtml(err.message)}</div>
+          <p style="margin-top:16px;">Please contact us at <a href="mailto:qfworkai@gmail.com" style="color:#0d7a6f;">hello@qfwork.ai</a>.</p>
+        `;
       });
     }
 

@@ -414,25 +414,58 @@ app.post('/api/interview-feedback', async (req, res) => {
 // 
 // This Calendly booking is the one occurs before the trial session for new users
 // Calendly booking at the feedback report session can be added if needed
+//
+// The code is sent to the invitee's email via Brevo transactional email.
 // ============================================================
 
-app.post('/api/issue-code', (req, res) => {
-  const { email, name } = req.body || {};
+const Brevo = require('@getbrevo/brevo');
 
+async function sendTrialCodeEmail(toEmail, trialCode) {
+  const brevo = new Brevo.BrevoClient({ apiKey: process.env.BREVO_API_KEY });
+
+  try {
+    await brevo.transactionalEmails.sendTransacEmail({
+      subject: "Your QFwork.ai Trial Code",
+      htmlContent: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Thanks for booking!</h2>
+          <p>Your trial code is:</p>
+          <p style="font-size: 24px; font-weight: bold; letter-spacing: 2px; background: #e9f6f4; padding: 12px; border-radius: 8px; text-align: center;">
+            ${trialCode}
+          </p>
+          <p>Use it at <a href="https://your-site.com/exam.html">QFwork.ai</a> to start your trial session.</p>
+          <p style="color: #667085; font-size: 13px; margin-top: 24px;">This code is unique to you and can only be used once.</p>
+        </div>
+      `,
+      sender: { name: "QFwork.ai", email: process.env.BREVO_SENDER_EMAIL || 'hello@your-verified-domain.com' }, // Must be verified in Brevo
+      to: [{ email: toEmail }]
+    });
+    console.log(`[email] Trial code sent to ${toEmail}`);
+  } catch (error) {
+    console.error(`[email] Failed to send to ${toEmail}:`, error.message);
+    throw error;
+  }
+}
+
+app.post('/api/issue-code', async (req, res) => {
+  const { email } = req.body || {};
   if (!email) {
     return res.status(400).json({ ok: false, error: 'Missing email.' });
   }
 
   const code = access.issueCode(email);
   if (!code) {
-    return res.status(503).json({
-      ok: false,
-      error: 'No trial codes available right now. Please contact qfworkai@gmail.com.'
-    });
+    return res.status(503).json({ ok: false, error: 'No trial codes available right now.' });
   }
 
-  console.log(`[booking] issued ${code} to ${email}`);
-  return res.json({ ok: true, code });
+  try {
+    await sendTrialCodeEmail(email, code);
+    return res.json({ ok: true, message: 'Trial code sent to your email.' });
+  } catch (e) {
+    // If email fails, the code is still reserved. Log and return an error.
+    console.error('[api/issue-code] Email failed:', e.message);
+    return res.status(500).json({ ok: false, error: 'Could not send the email. Please contact support.' });
+  }
 });
 
 // Config endpoint — exposes safe-to-share config values to the frontend.

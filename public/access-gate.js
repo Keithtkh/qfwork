@@ -95,7 +95,12 @@
     '.qf-gate-foot{margin:20px 0 0;padding-top:18px;border-top:1px solid #eef2f4;',
     '  font-size:12.5px;line-height:1.55;color:#98a2b3;}',
     '.qf-gate-foot a{color:#0d7a6f;}',
-    'html.qf-locked,body.qf-locked{overflow:hidden;}'
+    'html.qf-locked,body.qf-locked{overflow:hidden;}',
+    '#qf-gate .qf-gate-divider{display:flex;align-items:center;gap:12px;margin:22px 0 18px;color:#98a2b3;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;}',
+    '#qf-gate .qf-gate-divider::before,#qf-gate .qf-gate-divider::after{content:"";flex:1;height:1px;background:#e7eaee;}',
+    '#qf-gate .qf-gate-book{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;box-sizing:border-box;background:linear-gradient(135deg,#ef6a3d,#f59e6b);color:#fff;border:0;border-radius:12px;padding:15px 22px;font:inherit;font-size:15px;font-weight:600;text-decoration:none;cursor:pointer;transition:.16s;box-shadow:0 6px 18px rgba(239,106,61,.28);}',
+    '#qf-gate .qf-gate-book:hover{filter:brightness(1.06);transform:translateY(-1px);box-shadow:0 8px 22px rgba(239,106,61,.34);}',
+    '#qf-gate .qf-gate-book svg{flex:none;}'
   ].join('');
   document.head.appendChild(css);
 
@@ -122,7 +127,12 @@
     '    <p id="qf-gate-err" role="alert" aria-live="polite"></p>',
     '    <button id="qf-gate-btn" type="submit">Continue</button>',
     '  </form>',
-    '  <p class="qf-gate-foot">Don\'t have a code? <a href="mailto:hello@qfwork.ai?subject=QFwork.ai%20trial%20access">Request access</a> and we\'ll send you one.</p>',
+    '  <div class="qf-gate-divider"><span>or</span></div>',
+    '  <a href="/book.html" class="qf-gate-book">',
+    '    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+    '    Book a free trial session',
+    '  </a>',
+    '  <p class="qf-gate-foot">Want to have a trial? Get a trial code!</p>',
     '</div>'
   ].join('');
 
