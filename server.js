@@ -534,3 +534,35 @@ server.listen(PORT, () => {
   }
   console.log('');
 });
+
+app.post('/api/fillout-webhook', express.json(), async (req, res) => {
+  // Fillout sends the submission data in the request body.
+  // The structure depends on your form fields.
+  // This example assumes you have an email question with ID "q_email".
+  const email = req.body?.questions?.find(q => q.id === 'q_email')?.value;
+
+  if (!email) {
+    console.error('[webhook] No email found in Fillout payload');
+    return res.status(400).json({ ok: false, error: 'Missing email' });
+  }
+
+  try {
+    // Reuse your existing code issuance logic
+    const code = access.issueCode(email);
+
+    if (!code) {
+      console.error('[webhook] No trial codes available');
+      return res.status(503).json({ ok: false, error: 'No codes available' });
+    }
+
+    // Send the email via Brevo
+    await sendTrialCodeEmail(email, code);
+    console.log(`[webhook] Trial code sent to ${email}`);
+
+    // Always respond with 200 so Fillout knows it succeeded
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('[webhook] Failed to process booking:', error.message);
+    res.status(500).json({ ok: false, error: 'Internal error' });
+  }
+});

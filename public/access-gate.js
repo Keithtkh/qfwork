@@ -127,12 +127,12 @@
     '    <p id="qf-gate-err" role="alert" aria-live="polite"></p>',
     '    <button id="qf-gate-btn" type="submit">Continue</button>',
     '  </form>',
-    '  <div class="qf-gate-divider"><span>or</span></div>',
+    '  <p style="margin: 18px 0;"></p>',
     '  <a href="/book.html" class="qf-gate-book">',
     '    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
     '    Book a free trial session',
     '  </a>',
-    '  <p class="qf-gate-foot">Want to have a trial? Get a trial code!</p>',
+    '  <p class="qf-gate-foot">Book a FREE 1-on-1 consultation session with our team to get a free trial code. You will get advice based on your session report and learn more about how to improve.</p>',
     '</div>'
   ].join('');
 
