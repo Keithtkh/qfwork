@@ -540,7 +540,7 @@ app.post('/api/fillout-webhook', express.json(), async (req, res) => {
   // The structure depends on your form fields.
   // This example assumes you have an email question with ID "q_email".
   console.log('[webhook] Full payload:', JSON.stringify(req.body, null, 2));
-  const email = req.body?.questions?.find(q => q.id === 'q_email')?.value;
+  const email = req.body?.questions?.find(q => q.id === 'email')?.value;
 
   if (!email) {
     console.error('[webhook] No email found in Fillout payload');
