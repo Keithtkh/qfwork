@@ -536,31 +536,28 @@ server.listen(PORT, () => {
 });
 
 app.post('/api/fillout-webhook', express.json(), async (req, res) => {
-  // Fillout sends the submission data in the request body.
-  // The structure depends on your form fields.
-  // This example assumes you have an email question with ID "q_email".
   console.log('[webhook] Full payload:', JSON.stringify(req.body, null, 2));
-  const email = req.body?.questions?.find(q => q.id === 'email')?.value;
+
+  // The booking details live under submission.scheduling[0].value
+  const scheduling = req.body?.submission?.scheduling?.[0];
+  const email = scheduling?.value?.email;
+  const fullName = scheduling?.value?.fullName || '';
 
   if (!email) {
     console.error('[webhook] No email found in Fillout payload');
-    return res.status(400).json({ ok: false, error: 'Missing email' });
+    // Return 200 so Fillout doesn't retry endlessly on test payloads
+    return res.status(200).json({ ok: false, error: 'Missing email' });
   }
 
   try {
-    // Reuse your existing code issuance logic
     const code = access.issueCode(email);
-
     if (!code) {
       console.error('[webhook] No trial codes available');
-      return res.status(503).json({ ok: false, error: 'No codes available' });
+      return res.status(200).json({ ok: false, error: 'No codes available' });
     }
 
-    // Send the email via Brevo
-    await sendTrialCodeEmail(email, code);
+    await sendTrialCodeEmail(email, code, fullName);
     console.log(`[webhook] Trial code sent to ${email}`);
-
-    // Always respond with 200 so Fillout knows it succeeded
     res.status(200).json({ ok: true });
   } catch (error) {
     console.error('[webhook] Failed to process booking:', error.message);
