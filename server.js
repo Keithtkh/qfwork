@@ -539,6 +539,7 @@ app.post('/api/fillout-webhook', express.json(), async (req, res) => {
   // Fillout sends the submission data in the request body.
   // The structure depends on your form fields.
   // This example assumes you have an email question with ID "q_email".
+  console.log('[webhook] Full payload:', JSON.stringify(req.body, null, 2));
   const email = req.body?.questions?.find(q => q.id === 'q_email')?.value;
 
   if (!email) {
