@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Marketing Interview — QFwork.ai</title>
+  <link rel="icon" href="logo-mark.png" />
+  <script src="https://assets.calendly.com/assets/external/widget.js" async></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <style>
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #f6f8fa; color: #101828; }
+    .header { background: #fff; border-bottom: 1px solid #e7eaee; padding: 15px 26px; display: flex; align-items: center; gap: 11px; }
+    .header img { width: 34px; height: 34px; }
+    .header .brand { font-weight: 700; font-size: 16px; }
+    .header .brand span { color: #0d7a6f; }
+    main { max-width: 640px; margin: 0 auto; padding: 40px 22px 90px; }
+    .view { display: none; }
+    .view.active { display: block; }
+    .card { background: #fff; border: 1px solid #e7eaee; border-radius: 16px; padding: 30px; }
+    h1 { font-size: 26px; margin: 0 0 12px; }
+    .lede { color: #667085; line-height: 1.55; margin: 0 0 22px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 7px; margin-top: 16px; }
+    input { width: 100%; box-sizing: border-box; border: 1px solid #e7eaee; border-radius: 12px; padding: 12px 14px; font: inherit; }
+    button { width: 100%; margin-top: 22px; border: 0; border-radius: 12px; background: #0d7a6f; color: #fff; font: inherit; font-weight: 600; font-size: 16px; padding: 14px; cursor: pointer; }
+    button:disabled { opacity: .5; }
+    .err { color: #b42318; margin-top: 12px; }
+    #stage { width: 100%; aspect-ratio: 16/9; background: #0b1220; border-radius: 16px; overflow: hidden; }
+    #stage iframe { width: 100%; height: 100%; border: 0; }
+    #calendlyWrap {
+        background: #f6f8fa;
+        border-radius: 12px;
+        overflow: hidden;
+        min-height: 680px;
+    }
+    #calendlyWrap iframe {
+        width: 100%;
+        border: 0;
+    }
+    .steps-list {
+        list-style: none;
+        counter-reset: step;
+        padding: 0;
+        margin: 22px 0 0;
+    }
+    .steps-list > li {
+        counter-increment: step;
+        position: relative;
+        padding-left: 46px;
+        margin-bottom: 22px;
+    }
+    .steps-list > li::before {
+        content: counter(step);
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: #0d7a6f;
+        color: #fff;
+        font-weight: 700;
+        font-size: 13px;
+        display: grid;
+        place-items: center;
+    }
+    .steps-list > li > strong {
+        display: block;
+        font-size: 15px;
+        margin-bottom: 4px;
+    }
+    .steps-list > li > p {
+        margin: 0;
+        color: #667085;
+        font-size: 14px;
+        line-height: 1.55;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="logo-mark.png" alt="" />
+    <div class="brand">QFwork<span>.ai</span></div>
+  </div>
+
+  <main>
+    <!-- View 1: Instructions -->
+    <div id="viewIntro" class="view">
+        <div class="card">
+            <h1>Marketing Interview</h1>
+            <p class="lede">Before you begin, here's how the process works.</p>
+
+            <ol class="steps-list">
+                <li>
+                    <strong>Fill in your details</strong>
+                    <p>Your name and email so we can identify you. You can optionally upload your CV. If you do, the AI will ask about your experience based on it.</p>
+                </li>
+                <li>
+                    <strong>Complete a short AI interview (about 5–10 minutes)</strong>
+                    <p>You'll speak with an AI interviewer about your marketing background and experience. Make sure your microphone and camera are working, and find a quiet place.</p>
+                </li>
+                <li>
+                    <strong>Book a follow-up interview</strong>
+                    <p>Right after the AI interview ends, you'll be asked to book a short follow-up call with our hiring team.</p>
+                </li>
+            </ol>
+
+            <p class="lede" style="margin-top:22px; font-size:14px;">
+            <strong>Tips:</strong> Use headphones if you have them. Speak clearly and naturally. There's no time pressure — the AI waits for you to finish each answer.
+            </p>
+
+            <button id="beginBtn" onclick="goToForm()">I understand — let's begin</button>
+        </div>
+    </div>
+
+    <!-- View 2: loading / invalid -->
+    <div id="viewCheck" class="view active">
+      <div class="card">
+        <p id="checkMsg">Checking your link…</p>
+      </div>
+    </div>
+
+    <!-- View 3: form -->
+    <div id="viewForm" class="view">
+      <div class="card">
+        <h1>Marketing Interview</h1>
+        <p class="lede">Please introduce yourself. You'll then meet our AI interviewer for a short conversation.</p>
+
+        <label for="name">Full Name</label>
+        <input type="text" id="name" required />
+
+        <label for="email">Email Address</label>
+        <input type="email" id="email" required />
+
+        <label for="cvFile">Upload your CV <span style="color:#667085;font-weight:400;">(optional — PDF, Word, or text)</span></label>
+        <input type="file" id="cvFile" accept=".pdf,.doc,.docx,.txt,.md" />
+        <p class="ex" style="margin-top:6px;">Your CV is used only for this interview. The AI will ask about your experience based on it.</p>
+
+        <button id="startBtn" onclick="startInterview()">Begin Interview</button>
+        <p class="err" id="formErr"></p>
+      </div>
+    </div>
+
+    <!-- View 4: interview room -->
+    <div id="viewRoom" class="view">
+      <div class="card">
+        <p style="margin:0 0 16px; color:#667085;">Speak naturally. When you finish, click "End interview" below.</p>
+        <div id="stage"></div>
+        <button onclick="endInterview()" style="background:#ef4444; margin-top:18px;">End interview</button>
+      </div>
+    </div>
+
+    <!-- View 5: done -->
+    <div id="viewDone" class="view">
+        <div class="card">
+            <h1>Interview complete ✓</h1>
+            <p class="lede">Thanks for taking the time. Now please book a short follow-up interview with our team.</p>
+            <div id="calendlyWrap" style="margin-top:22px;">
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
+  </main>
+
+  <script>
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
+    async function extractCvText(file) {
+      const name = file.name.toLowerCase();
+
+      if (name.endsWith('.txt') || name.endsWith('.md')) {
+        return await file.text();
+      }
+
+      if (name.endsWith('.pdf')) {
+        const buf = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+        let text = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          text += content.items.map(item => item.str).join(' ') + '\n';
+        }
+        return text;
+      }
+
+      if (name.endsWith('.docx') || name.endsWith('.doc')) {
+        const buf = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer: buf });
+        return result.value;
+      }
+
+      throw new Error('Unsupported file type.');
+    }
+
+    const $ = (id) => document.getElementById(id);
+    const params = new URLSearchParams(location.search);
+    const token = params.get('token');
+
+    let state = { conversationId: null };
+
+    function show(id) {
+        ['viewCheck','viewIntro','viewForm','viewRoom','viewDone'].forEach(v =>
+            $(v).classList.toggle('active', v === id));
+    }
+
+    function goToForm() {
+        show('viewForm');
+    }
+
+    // 1. Verify the token on load
+    if (!token) {
+      $('checkMsg').textContent = 'Invalid link — no token provided.';
+    } else {
+      fetch(`/api/hire/verify-token?token=${encodeURIComponent(token)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (!data.ok) {
+            $('checkMsg').textContent = data.error || 'This link is not valid.';
+            return;
+          }
+          show('viewIntro');
+        })
+        .catch(() => {
+          $('checkMsg').textContent = 'Could not verify the link. Try again later.';
+        });
+    }
+
+    // 2. Start the interview
+    async function startInterview() {
+      const name  = $('name').value.trim();
+      const email = $('email').value.trim();
+
+      if (!name || !email) {
+        $('formErr').textContent = 'Please enter your name and email.';
+        return;
+      }
+
+      // Read the CV if one was uploaded
+      let cvText = '';
+      const file = $('cvFile').files[0];
+      if (file) {
+        $('startBtn').disabled = true;
+        $('startBtn').textContent = 'Reading your CV…';
+        try {
+          const text = await extractCvText(file);
+          if (text.trim()) cvText = text.slice(0, 5000);
+        } catch (e) {
+          console.warn('Could not read CV:', e);
+          // Non-fatal — continue without the CV
+        }
+      }
+
+      $('startBtn').disabled = true;
+      $('startBtn').textContent = 'Starting…';
+      $('formErr').textContent = '';
+
+      try {
+        const r = await fetch('/api/hire/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, token, cvText })
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Could not start.');
+
+        state.conversationId = data.conversationId;
+
+        // Embed the Tavus room
+        const iframe = document.createElement('iframe');
+        iframe.src = data.conversationUrl;
+        iframe.allow = 'camera; microphone; autoplay; fullscreen';
+        $('stage').innerHTML = '';
+        $('stage').appendChild(iframe);
+
+        show('viewRoom');
+      } catch (e) {
+        $('formErr').textContent = e.message;
+        $('startBtn').disabled = false;
+        $('startBtn').textContent = 'Begin Interview';
+      }
+    }
+
+    // 3. End the interview and request the report
+    async function endInterview() {
+        if (!state.conversationId) return show('viewDone');
+
+        const conversationId = state.conversationId;
+
+        // Show the done view immediately
+        show('viewDone');
+
+        // Fire the feedback request in the background (no await)
+        fetch('/api/hire/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conversationId })
+        }).catch(e => console.warn('Feedback request failed:', e));
+
+        // Load the Calendly widget inline
+        try {
+            const r = await fetch('/api/hire/config');
+            const cfg = await r.json();
+
+            const wrap = document.getElementById('calendlyWrap');
+
+            if (!cfg.calendlyFollowupUrl) {
+                wrap.innerHTML = '<p style="color:#667085;">Booking is not available right now. We will be in touch.</p>';
+                return;
+            }
+
+            const div = document.createElement('div');
+            div.className = 'calendly-inline-widget';
+            div.setAttribute('data-url', cfg.calendlyFollowupUrl);
+            div.style.minWidth = '320px';
+            div.style.height = '680px';
+            wrap.innerHTML = '';
+            wrap.appendChild(div);
+
+            // Calendly's script is already loaded, but needs to scan for new widgets
+            if (window.Calendly) {
+                window.Calendly.initInlineWidget({
+                url: cfg.calendlyFollowupUrl,
+                parentElement: div
+                });
+            }
+        } catch (e) {
+            console.warn('Could not load booking:', e);
+            document.getElementById('calendlyWrap').innerHTML =
+            '<p style="color:#667085;">Booking is not available right now. We will be in touch.</p>';
+        }
+    }
+  </script>
+</body>
+</html>

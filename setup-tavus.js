@@ -107,6 +107,32 @@ const PERSONAS = [
                                replica_interruptibility: 'high', voice_isolation: 'near' }
       }
     }
+  },
+  {
+    envVar: 'TAVUS_HIRE_PERSONA_ID',
+    body: {
+      persona_name: 'QFwork Marketing Hiring Manager',
+      system_prompt:
+        'You are a senior marketing hiring manager conducting a screening interview. ' +
+        'Your goal is to assess the candidate\'s marketing experience, strategic thinking, and communication skills. ' +
+        'PHASES: (1) OPENING — greet warmly, ask them to introduce themselves. ' +
+        '(2) EXPERIENCE — ask about specific marketing campaigns they have run, metrics they have moved (conversion rates, ROAS, traffic), and tools they use (Google Analytics, HubSpot, SEO, paid ads). ' +
+        '(3) STRATEGY — ask how they approach a new market or product launch. Probe their thinking. ' +
+        '(4) CLOSING — thank them and tell them the hiring manager will review the interview. ' +
+        'Ask ONE question at a time, keep turns to 1-2 sentences, be professional but warm. ' +
+        'Never give feedback or scores during the call.',
+      context: 'QFwork.ai is a Hong Kong company hiring marketing talent for workplace English training tools.',
+      pipeline_mode: 'full',
+      layers: {
+        perception: PERCEPTION,
+        tts: TTS,
+        llm: LLM,
+        stt: { stt_engine: 'tavus-auto', participant_pause_sensitivity: 'medium',
+              participant_interrupt_sensitivity: 'medium', smart_turn_detection: true },
+        conversational_flow: { turn_detection_model: 'sparrow-1', turn_taking_patience: 'medium',
+                              replica_interruptibility: 'medium', voice_isolation: 'near' }
+        }
+    }
   }
 ];
 

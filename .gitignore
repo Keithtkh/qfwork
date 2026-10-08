@@ -29,3 +29,7 @@ trial-codes-issued.json.tmp
 # Logs
 *.log
 npm-debug.log*
+
+# Hiring sessions state. Runtime state, not config — the issued list itself lives in HIRING_SESSIONS_STATE.
+hiring-sessions.json
+hiring-sessions.json.tmp
