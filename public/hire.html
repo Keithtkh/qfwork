@@ -6,8 +6,6 @@
   <title>Marketing Interview — QFwork.ai</title>
   <link rel="icon" href="logo-mark.png" />
   <script src="https://assets.calendly.com/assets/external/widget.js" async></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <style>
     body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #f6f8fa; color: #101828; }
     .header { background: #fff; border-bottom: 1px solid #e7eaee; padding: 15px 26px; display: flex; align-items: center; gap: 11px; }
@@ -93,7 +91,7 @@
             <ol class="steps-list">
                 <li>
                     <strong>Fill in your details</strong>
-                    <p>Your name and email so we can identify you. You can optionally upload your CV. If you do, the AI will ask about your experience based on it.</p>
+                    <p>Your name and email so we can identify you. You should also upload your CV so that we can know more about you.</p>
                 </li>
                 <li>
                     <strong>Complete a short AI interview (about 5–10 minutes)</strong>
@@ -132,10 +130,6 @@
         <label for="email">Email Address</label>
         <input type="email" id="email" required />
 
-        <label for="cvFile">Upload your CV <span style="color:#667085;font-weight:400;">(optional — PDF, Word, or text)</span></label>
-        <input type="file" id="cvFile" accept=".pdf,.doc,.docx,.txt,.md" />
-        <p class="ex" style="margin-top:6px;">Your CV is used only for this interview. The AI will ask about your experience based on it.</p>
-
         <button id="startBtn" onclick="startInterview()">Begin Interview</button>
         <p class="err" id="formErr"></p>
       </div>
@@ -163,37 +157,6 @@
   </main>
 
   <script>
-    if (window.pdfjsLib) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
-
-    async function extractCvText(file) {
-      const name = file.name.toLowerCase();
-
-      if (name.endsWith('.txt') || name.endsWith('.md')) {
-        return await file.text();
-      }
-
-      if (name.endsWith('.pdf')) {
-        const buf = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-        let text = '';
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          text += content.items.map(item => item.str).join(' ') + '\n';
-        }
-        return text;
-      }
-
-      if (name.endsWith('.docx') || name.endsWith('.doc')) {
-        const buf = await file.arrayBuffer();
-        const result = await mammoth.extractRawText({ arrayBuffer: buf });
-        return result.value;
-      }
-
-      throw new Error('Unsupported file type.');
-    }
 
     const $ = (id) => document.getElementById(id);
     const params = new URLSearchParams(location.search);
@@ -238,21 +201,6 @@
         return;
       }
 
-      // Read the CV if one was uploaded
-      let cvText = '';
-      const file = $('cvFile').files[0];
-      if (file) {
-        $('startBtn').disabled = true;
-        $('startBtn').textContent = 'Reading your CV…';
-        try {
-          const text = await extractCvText(file);
-          if (text.trim()) cvText = text.slice(0, 5000);
-        } catch (e) {
-          console.warn('Could not read CV:', e);
-          // Non-fatal — continue without the CV
-        }
-      }
-
       $('startBtn').disabled = true;
       $('startBtn').textContent = 'Starting…';
       $('formErr').textContent = '';
@@ -261,7 +209,7 @@
         const r = await fetch('/api/hire/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, token, cvText })
+          body: JSON.stringify({ name, email, token})
         });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || 'Could not start.');

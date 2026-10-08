@@ -1,12 +1,10 @@
 const fetch = require('node-fetch');
 
-async function generateHiringReport({ transcript, candidateName, cvText }) {
+async function generateHiringReport({ transcript, candidateName}) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error('GROQ_API_KEY not set');
 
   const systemPrompt = `You are an expert marketing hiring manager. Analyze this interview transcript.
-
-    ${cvText ? `The candidate has provided a CV. Assess whether their spoken answers aligned with and were supported by the CV. Note any gaps or over-claims.\n` : ''}
     
     Assess the candidate on:
     1. CAMPAIGN EXPERIENCE — specific campaigns, metrics moved, results
