@@ -44,6 +44,20 @@ const HIRING_SESSIONS_FILE = process.env.HIRING_SESSIONS_STATE
 
 const hiringSessions = new Map();
 
+const cvStore = new Map();  // token → cvText (in-memory only, never persisted)
+
+// Purge CVs older than 2 hours
+const CV_TTL_MS = 2 * 60 * 60 * 1000;
+setInterval(() => {
+  const now = Date.now();
+  for (const [key] of cvStore) {
+    const session = hiringSessions.get(key);
+    if (!session || now - new Date(session.usedAt).getTime() > CV_TTL_MS) {
+      cvStore.delete(key);
+    }
+  }
+}, 15 * 60 * 1000);
+
 function loadHiringSessions() {
   try {
     const obj = JSON.parse(fs.readFileSync(HIRING_SESSIONS_FILE, 'utf8'));
@@ -75,11 +89,16 @@ function escapeHtml(s) {
   }[c]));
 }
 
-async function sendHiringReportEmail(session, report) {
+async function sendHiringReportEmail(session, report, cvText) {
   const brevo = new Brevo.BrevoClient({ apiKey: process.env.BREVO_API_KEY });
 
   const strengths = report.strengths.map(s => `<li>${s}</li>`).join('');
   const concerns  = report.concerns.map(c => `<li>${c}</li>`).join('');
+
+  const cvBlock = cvText
+    ? `<h3>Candidate's CV</h3>
+       <pre style="white-space:pre-wrap; font-family:monospace; font-size:12px; background:#f6f8fa; padding:14px; border-radius:8px; border:1px solid #e7eaee; max-height:500px; overflow:auto;">${escapeHtml(cvText)}</pre>`
+    : `<p style="color:#667085; font-style:italic;">No CV was uploaded by the candidate.</p>`;
 
   await brevo.transactionalEmails.sendTransacEmail({
     subject: `Hiring Report: ${session.candidateName} — ${report.recommendation}`,
@@ -105,6 +124,8 @@ async function sendHiringReportEmail(session, report) {
         <p><strong>Technical Skills:</strong> ${report.technicalSkills}</p>
         <p><strong>Strategic Thinking:</strong> ${report.strategicThinking}</p>
         <p><strong>Communication:</strong> ${report.communication}</p>
+
+        ${cvBlock}
       </div>
     `,
     sender: {
@@ -115,8 +136,13 @@ async function sendHiringReportEmail(session, report) {
   });
 }
 
-async function sendNoTranscriptEmail(session) {
+async function sendNoTranscriptEmail(session, cvText) {
   const brevo = new Brevo.BrevoClient({ apiKey: process.env.BREVO_API_KEY });
+
+    const cvBlock = cvText
+    ? `<h3>Candidate's CV</h3>
+       <pre style="white-space:pre-wrap; font-family:monospace; font-size:12px; background:#f6f8fa; padding:14px; border-radius:8px; border:1px solid #e7eaee; max-height:500px; overflow:auto;">${escapeHtml(cvText)}</pre>`
+    : `<p style="color:#667085; font-style:italic;">No CV was provided.</p>`;
 
   await brevo.transactionalEmails.sendTransacEmail({
     subject: `Interview completed (no audio) — ${session.candidateName}`,
@@ -137,6 +163,8 @@ async function sendNoTranscriptEmail(session) {
           No report was generated. You may want to follow up with the candidate
           to reschedule.
         </p>
+
+        ${cvBlock}
       </div>
     `,
     sender: {
@@ -147,8 +175,13 @@ async function sendNoTranscriptEmail(session) {
   });
 }
 
-async function sendHireFailureEmail(session, errorMessage) {
+async function sendHireFailureEmail(session, errorMessage, cvText) {
   const brevo = new Brevo.BrevoClient({ apiKey: process.env.BREVO_API_KEY });
+
+  const cvBlock = cvText
+    ? `<h3>Candidate's CV</h3>
+       <pre style="white-space:pre-wrap; font-family:monospace; font-size:12px; background:#f6f8fa; padding:14px; border-radius:8px; border:1px solid #e7eaee; max-height:500px; overflow:auto;">${escapeHtml(cvText)}</pre>`
+    : `<p style="color:#667085; font-style:italic;">No CV was provided.</p>`;
 
   await brevo.transactionalEmails.sendTransacEmail({
     subject: `Interview completed (report failed) — ${session.candidateName}`,
@@ -172,6 +205,8 @@ async function sendHireFailureEmail(session, errorMessage) {
           You may want to follow up with the candidate directly, or re-run the report
           if the issue is temporary.
         </p>
+
+        ${cvBlock}
       </div>
     `,
     sender: {
@@ -200,7 +235,7 @@ function attach(app) {
   });
 
   app.post('/api/hire/start', async (req, res) => {
-    const { name, email, token } = req.body;
+    const { name, email, token, cvText } = req.body;
 
     if (!token || !hiringTokens().has(token)) {
       return res.status(403).json({ error: 'Invalid token.' });
@@ -232,9 +267,14 @@ function attach(app) {
         - After 4-5 minutes, move to the closing phase naturally.
       `;
 
+      let contextWithCv = context;
+      if (cvText && cvText.trim()) {
+        contextWithCv += `\n\nThe candidate has uploaded their CV. Use it to tailor your questions — ask about specific roles, projects, skills, or transitions mentioned in the CV. Do NOT read the CV back verbatim or ask them to summarise it. CV content:\n"""\n${cvText.trim().slice(0, 5000)}\n"""`;
+      }
+
       const convo = await createConversation({
         conversationName: `Hiring — ${name}`,
-        conversationalContext: context,
+        conversationalContext: contextWithCv,
         customGreeting: `Hi ${name}, thanks for taking the time. Let's start — could you tell me a bit about yourself and your marketing background?`,
         personaId: process.env.TAVUS_HIRE_PERSONA_ID,
         maxSeconds: parseInt(process.env.TAVUS_HIRE_MAX_SECONDS || '600', 10)
@@ -247,6 +287,11 @@ function attach(app) {
         usedAt: new Date().toISOString()
       });
       saveHiringSessions();
+
+      // Store the CV in memory only — never persisted
+      if (cvText && cvText.trim()) {
+        cvStore.set(token, cvText.trim().slice(0, 5000));
+      }
 
       res.json({
         conversationId: convo.conversation_id,
@@ -268,7 +313,9 @@ function attach(app) {
       }
     }
     if (!session) return res.status(404).json({ error: 'Session not found.' });
-
+    // Retrieve the CV from memory and wipe it
+    const cvText = cvStore.get(sessionToken) || '';
+    cvStore.delete(sessionToken);
     res.json({ ok: true, message: 'Processing in the background.' });
 
     (async () => {
@@ -285,7 +332,7 @@ function attach(app) {
         if (!result.userText || result.userText.length < 15) {
           console.warn(`[hire] no usable transcript for ${conversationId}`);
           try {
-            await sendNoTranscriptEmail(session);
+            await sendNoTranscriptEmail(session, cvText);
             console.log(`[hire] no-transcript notice sent for ${session.candidateName}`);
           } catch (e) {
             console.error('[hire] failed to send no-transcript notice:', e.message);
@@ -295,7 +342,8 @@ function attach(app) {
 
         const report = await generateHiringReport({
           transcript: result.userText,
-          candidateName: session.candidateName
+          candidateName: session.candidateName,
+          cvText: cvText
         });
 
         await sendHiringReportEmail(session, report);
@@ -305,7 +353,7 @@ function attach(app) {
       } catch (e) {
         console.error('[hire] background processing failed:', e.message);
         try {
-          await sendHireFailureEmail(session, e.message);
+          await sendHireFailureEmail(session, e.message, cvText);
           console.log(`[hire] failure notice sent for ${session.candidateName}`);
         } catch (emailErr) {
           console.error('[hire] failed to send failure notice:', emailErr.message);
