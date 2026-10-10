@@ -10,7 +10,6 @@
 //   GET  /api/hire/verify-token   → is this token valid and unused?
 //   POST /api/hire/start          → create a Tavus conversation for the candidate
 //   POST /api/hire/feedback       → end of call → transcript → hiring report
-//   GET  /api/hire/config         → Calendly follow-up URL for the frontend
 //
 // All routes and state live here. server.js just calls `attach(app)`.
 // ============================================================
@@ -37,12 +36,17 @@ function hiringTokens() {
   }
   return hiringTokensSet;
 }
+function isTestToken(token) {
+  const test = String(process.env.HIRING_TEST_TOKEN || '').trim();
+  return test && token === test;
+}
 
 // ── Session state (used tokens → candidate info) ─────────────
 const HIRING_SESSIONS_FILE = process.env.HIRING_SESSIONS_STATE
   || path.join(__dirname, 'hiring-sessions.json');
 
 const hiringSessions = new Map();
+const testSessions = new Map(); 
 
 const cvStore = new Map();  // token → cvText (in-memory only, never persisted)
 
@@ -51,7 +55,7 @@ const CV_TTL_MS = 2 * 60 * 60 * 1000;
 setInterval(() => {
   const now = Date.now();
   for (const [key] of cvStore) {
-    const session = hiringSessions.get(key);
+    const session = hiringSessions.get(key) || testSessions.get(key);
     if (!session || now - new Date(session.usedAt).getTime() > CV_TTL_MS) {
       cvStore.delete(key);
     }
@@ -89,16 +93,22 @@ function escapeHtml(s) {
   }[c]));
 }
 
-async function sendHiringReportEmail(session, report, cvText) {
+async function sendHiringReportEmail(session, report, cvText, cvAttachment) {
   const brevo = new Brevo.BrevoClient({ apiKey: process.env.BREVO_API_KEY });
 
   const strengths = report.strengths.map(s => `<li>${s}</li>`).join('');
   const concerns  = report.concerns.map(c => `<li>${c}</li>`).join('');
 
   const cvBlock = cvText
-    ? `<h3>Candidate's CV</h3>
-       <pre style="white-space:pre-wrap; font-family:monospace; font-size:12px; background:#f6f8fa; padding:14px; border-radius:8px; border:1px solid #e7eaee; max-height:500px; overflow:auto;">${escapeHtml(cvText)}</pre>`
+    ? ''
     : `<p style="color:#667085; font-style:italic;">No CV was uploaded by the candidate.</p>`;
+
+  const attachments = cvAttachment
+    ? [{
+        content: cvAttachment.base64,
+        name: cvAttachment.filename
+      }]
+    : [];
 
   await brevo.transactionalEmails.sendTransacEmail({
     subject: `Hiring Report: ${session.candidateName} — ${report.recommendation}`,
@@ -126,8 +136,13 @@ async function sendHiringReportEmail(session, report, cvText) {
         <p><strong>Communication:</strong> ${report.communication}</p>
 
         ${cvBlock}
+
+        <p style="color:#667085;font-size:13px;margin-top:18px;">
+          Follow-up: send the candidate a booking link for the next interview.
+        </p>
       </div>
     `,
+    attachment: attachments,
     sender: {
       name:  process.env.BREVO_SENDER_NAME  || 'QFwork.ai',
       email: process.env.BREVO_SENDER_EMAIL
@@ -136,13 +151,19 @@ async function sendHiringReportEmail(session, report, cvText) {
   });
 }
 
-async function sendNoTranscriptEmail(session, cvText) {
+async function sendNoTranscriptEmail(session, cvText, cvAttachment) {
   const brevo = new Brevo.BrevoClient({ apiKey: process.env.BREVO_API_KEY });
 
-    const cvBlock = cvText
-    ? `<h3>Candidate's CV</h3>
-       <pre style="white-space:pre-wrap; font-family:monospace; font-size:12px; background:#f6f8fa; padding:14px; border-radius:8px; border:1px solid #e7eaee; max-height:500px; overflow:auto;">${escapeHtml(cvText)}</pre>`
+  const cvBlock = cvText
+    ? ''
     : `<p style="color:#667085; font-style:italic;">No CV was provided.</p>`;
+
+  const attachments = cvAttachment
+    ? [{
+        content: cvAttachment.base64,
+        name: cvAttachment.filename
+      }]
+    : [];
 
   await brevo.transactionalEmails.sendTransacEmail({
     subject: `Interview completed (no audio) — ${session.candidateName}`,
@@ -167,6 +188,7 @@ async function sendNoTranscriptEmail(session, cvText) {
         ${cvBlock}
       </div>
     `,
+    attachment: attachments,
     sender: {
       name:  process.env.BREVO_SENDER_NAME  || 'QFwork.ai',
       email: process.env.BREVO_SENDER_EMAIL
@@ -175,13 +197,19 @@ async function sendNoTranscriptEmail(session, cvText) {
   });
 }
 
-async function sendHireFailureEmail(session, errorMessage, cvText) {
+async function sendHireFailureEmail(session, errorMessage, cvText, cvAttachment) {
   const brevo = new Brevo.BrevoClient({ apiKey: process.env.BREVO_API_KEY });
 
   const cvBlock = cvText
-    ? `<h3>Candidate's CV</h3>
-       <pre style="white-space:pre-wrap; font-family:monospace; font-size:12px; background:#f6f8fa; padding:14px; border-radius:8px; border:1px solid #e7eaee; max-height:500px; overflow:auto;">${escapeHtml(cvText)}</pre>`
+    ? ''
     : `<p style="color:#667085; font-style:italic;">No CV was provided.</p>`;
+
+  const attachments = cvAttachment
+    ? [{
+        content: cvAttachment.base64,
+        name: cvAttachment.filename
+      }]
+    : [];
 
   await brevo.transactionalEmails.sendTransacEmail({
     subject: `Interview completed (report failed) — ${session.candidateName}`,
@@ -209,6 +237,7 @@ async function sendHireFailureEmail(session, errorMessage, cvText) {
         ${cvBlock}
       </div>
     `,
+    attachment: attachments,
     sender: {
       name:  process.env.BREVO_SENDER_NAME  || 'QFwork.ai',
       email: process.env.BREVO_SENDER_EMAIL
@@ -223,6 +252,10 @@ function attach(app) {
   app.get('/api/hire/verify-token', (req, res) => {
     const { token } = req.query;
 
+    if (isTestToken(token)) {
+      return res.json({ ok: true, test: true });
+    }
+
     if (!token || !hiringTokens().has(token)) {
       return res.status(403).json({ ok: false, error: 'Invalid link.' });
     }
@@ -235,12 +268,14 @@ function attach(app) {
   });
 
   app.post('/api/hire/start', async (req, res) => {
-    const { name, email, token, cvText } = req.body;
+    const { name, email, token, cvText, cvBase64, cvFilename, cvMimeType } = req.body;
 
-    if (!token || !hiringTokens().has(token)) {
+    const test = isTestToken(token);
+
+    if (!test && (!token || !hiringTokens().has(token))) {
       return res.status(403).json({ error: 'Invalid token.' });
     }
-    if (hiringSessions.has(token)) {
+    if (!test && hiringSessions.has(token)) {
       return res.status(403).json({ error: 'This link has already been used.' });
     }
 
@@ -280,17 +315,31 @@ function attach(app) {
         maxSeconds: parseInt(process.env.TAVUS_HIRE_MAX_SECONDS || '600', 10)
       });
 
-      hiringSessions.set(token, {
-        candidateName: name,
-        candidateEmail: email,
-        conversationId: convo.conversation_id,
-        usedAt: new Date().toISOString()
-      });
-      saveHiringSessions();
+      if (!test) {
+        hiringSessions.set(token, {
+          candidateName: name,
+          candidateEmail: email,
+          conversationId: convo.conversation_id,
+          usedAt: new Date().toISOString()
+        });
+        saveHiringSessions();
+      } else {
+        testSessions.set(token, {
+          candidateName: name,
+          candidateEmail: email,
+          conversationId: convo.conversation_id,
+          usedAt: new Date().toISOString()
+        });
+      }
 
       // Store the CV in memory only — never persisted
       if (cvText && cvText.trim()) {
-        cvStore.set(token, cvText.trim().slice(0, 5000));
+        cvStore.set(token, {
+          text: cvText.trim().slice(0, 5000),
+          base64: cvBase64 || '',
+          filename: cvFilename || 'cv.txt',
+          mimetype: cvMimeType || 'application/octet-stream'
+        });
       }
 
       res.json({
@@ -312,10 +361,23 @@ function attach(app) {
         session = s; sessionToken = token; break;
       }
     }
+    if (!session) {
+      for (const [token, s] of testSessions) {
+        if (s.conversationId === conversationId) {
+          session = s; sessionToken = token; break;
+        }
+      }
+    }
     if (!session) return res.status(404).json({ error: 'Session not found.' });
     // Retrieve the CV from memory and wipe it
-    const cvText = cvStore.get(sessionToken) || '';
+    const cvData = cvStore.get(sessionToken) || {};
     cvStore.delete(sessionToken);
+
+    const cvText = cvData.text || '';
+    const cvBase64 = cvData.base64 || '';
+    const cvFilename = cvData.filename || '';
+    const cvMimeType = cvData.mimetype || '';
+
     res.json({ ok: true, message: 'Processing in the background.' });
 
     (async () => {
@@ -329,10 +391,14 @@ function attach(app) {
           if (result.userText && result.userText.length >= 15) break;
         }
 
+        const cvAttachment = cvBase64 && cvFilename
+          ? { base64: cvBase64, filename: cvFilename, mimetype: cvMimeType }
+          : null;
+
         if (!result.userText || result.userText.length < 15) {
           console.warn(`[hire] no usable transcript for ${conversationId}`);
           try {
-            await sendNoTranscriptEmail(session, cvText);
+            await sendNoTranscriptEmail(session, cvText, cvAttachment);
             console.log(`[hire] no-transcript notice sent for ${session.candidateName}`);
           } catch (e) {
             console.error('[hire] failed to send no-transcript notice:', e.message);
@@ -346,26 +412,18 @@ function attach(app) {
           cvText: cvText
         });
 
-        await sendHiringReportEmail(session, report);
-        hiringSessions.delete(sessionToken);
-        saveHiringSessions();
+        await sendHiringReportEmail(session, report, cvText, cvAttachment);
         console.log(`[hire] report sent for ${session.candidateName}`);
       } catch (e) {
         console.error('[hire] background processing failed:', e.message);
         try {
-          await sendHireFailureEmail(session, e.message, cvText);
+          await sendHireFailureEmail(session, e.message, cvText, cvAttachment);
           console.log(`[hire] failure notice sent for ${session.candidateName}`);
         } catch (emailErr) {
           console.error('[hire] failed to send failure notice:', emailErr.message);
         }
       }
     })();
-  });
-
-  app.get('/api/hire/config', (req, res) => {
-    res.json({
-      calendlyFollowupUrl: process.env.CALENDLY_FOLLOWUP_URL || ''
-    });
   });
 }
 

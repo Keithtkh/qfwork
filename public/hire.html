@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Marketing Interview — QFwork.ai</title>
   <link rel="icon" href="logo-mark.png" />
-  <script src="https://assets.calendly.com/assets/external/widget.js" async></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <style>
@@ -15,6 +14,7 @@
     .header .brand { font-weight: 700; font-size: 16px; }
     .header .brand span { color: #0d7a6f; }
     main { max-width: 640px; margin: 0 auto; padding: 40px 22px 90px; }
+    main.wide { max-width: 980px; }
     .view { display: none; }
     .view.active { display: block; }
     .card { background: #fff; border: 1px solid #e7eaee; border-radius: 16px; padding: 30px; }
@@ -100,8 +100,8 @@
                     <p>You'll speak with an AI interviewer about your marketing background and experience. Make sure your microphone and camera are working, and find a quiet place.</p>
                 </li>
                 <li>
-                    <strong>Book a follow-up interview</strong>
-                    <p>Right after the AI interview ends, you'll be asked to book a short follow-up call with our hiring team.</p>
+                    <strong>Wait for us to get back to you</strong>
+                    <p>After the AI interview ends, we will take a look at your responses and get back to you soon.</p>
                 </li>
             </ol>
 
@@ -152,13 +152,13 @@
 
     <!-- View 5: done -->
     <div id="viewDone" class="view">
-        <div class="card">
-            <h1>Interview complete ✓</h1>
-            <p class="lede">Thanks for taking the time. Now please book a short follow-up interview with our team.</p>
-            <div id="calendlyWrap" style="margin-top:22px;">
-                <div class="spinner"></div>
-            </div>
-        </div>
+      <div class="card">
+        <h1>Interview complete ✓</h1>
+        <p class="lede">Thanks for taking the time. We'll review your interview and be in touch shortly with the next steps.</p>
+        <p class="lede" style="font-size:14px; color:#667085;">
+            You can close this tab now. If you don't hear from us within a few days, feel free to reply to the email that brought you here.
+        </p>
+      </div>
     </div>
   </main>
 
@@ -205,6 +205,8 @@
     function show(id) {
         ['viewCheck','viewIntro','viewForm','viewRoom','viewDone'].forEach(v =>
             $(v).classList.toggle('active', v === id));
+
+        document.querySelector('main').classList.toggle('wide', id === 'viewRoom');
     }
 
     function goToForm() {
@@ -241,6 +243,11 @@
 
       // CV is REQUIRED
       const file = $('cvFile').files[0];
+      const MAX_CV_SIZE_MB = 5;
+      if (file.size > MAX_CV_SIZE_MB * 1024 * 1024) {
+        $('formErr').textContent = `Your CV is too large. Please upload a file under ${MAX_CV_SIZE_MB} MB.`;
+        return;
+      }
       if (!file) {
         $('formErr').textContent = 'Please upload your CV before continuing.';
         $('cvFile').focus();
@@ -249,6 +256,9 @@
 
       // Read and extract the CV text
       let cvText = '';
+      let cvBase64 = '';
+      let cvFilename = file.name;
+      let cvMimeType = file.type || 'application/octet-stream';
       $('startBtn').disabled = true;
       $('startBtn').textContent = 'Reading your CV…';
       $('formErr').textContent = '';
@@ -259,6 +269,14 @@
           throw new Error('The CV appears to be empty or unreadable (a scanned PDF, perhaps). Please upload a text-based file.');
         }
         cvText = text.slice(0, 5000);
+
+        // Read the raw file as Base64 for attachment
+        cvBase64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
       } catch (e) {
         $('formErr').textContent = e.message || 'Could not read the CV. Please try a different file.';
         $('startBtn').disabled = false;
@@ -272,7 +290,15 @@
         const r = await fetch('/api/hire/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: fullName, email, token, cvText })
+          body: JSON.stringify({
+            name: fullName,
+            email,
+            token,
+            cvText,
+            cvBase64,
+            cvFilename,
+            cvMimeType
+          })
         });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || 'Could not start.');
@@ -308,39 +334,6 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ conversationId })
         }).catch(e => console.warn('Feedback request failed:', e));
-
-        // Load the Calendly widget inline
-        try {
-            const r = await fetch('/api/hire/config');
-            const cfg = await r.json();
-
-            const wrap = document.getElementById('calendlyWrap');
-
-            if (!cfg.calendlyFollowupUrl) {
-                wrap.innerHTML = '<p style="color:#667085;">Booking is not available right now. We will be in touch.</p>';
-                return;
-            }
-
-            const div = document.createElement('div');
-            div.className = 'calendly-inline-widget';
-            div.setAttribute('data-url', cfg.calendlyFollowupUrl);
-            div.style.minWidth = '320px';
-            div.style.height = '680px';
-            wrap.innerHTML = '';
-            wrap.appendChild(div);
-
-            // Calendly's script is already loaded, but needs to scan for new widgets
-            if (window.Calendly) {
-                window.Calendly.initInlineWidget({
-                url: cfg.calendlyFollowupUrl,
-                parentElement: div
-                });
-            }
-        } catch (e) {
-            console.warn('Could not load booking:', e);
-            document.getElementById('calendlyWrap').innerHTML =
-            '<p style="color:#667085;">Booking is not available right now. We will be in touch.</p>';
-        }
     }
   </script>
 </body>
