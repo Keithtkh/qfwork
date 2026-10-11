@@ -271,12 +271,14 @@
         cvText = text.slice(0, 5000);
 
         // Read the raw file as Base64 for attachment
-        cvBase64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result.split(',')[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
+        const arrayBuffer = await file.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < uint8Array.length; i++) {
+          binary += String.fromCharCode(uint8Array[i]);
+        }
+        cvBase64 = btoa(binary);
+        
       } catch (e) {
         $('formErr').textContent = e.message || 'Could not read the CV. Please try a different file.';
         $('startBtn').disabled = false;
