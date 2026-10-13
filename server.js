@@ -35,7 +35,7 @@ const PORT = process.env.PORT || 3000;
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-app.use(express.json());
+app.use(express.json({limit: '10mb'}));
 app.use(cors());
 
 // Railway and friends sit in front of us; without this every request looks
