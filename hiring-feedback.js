@@ -20,7 +20,7 @@ async function generateHiringReport({ transcript, candidateName, cvText }) {
 
     The transcript of the candidate's interview is provided.
 
-    ${cvText ? `The candidate has provided a CV. Assess whether their spoken answers aligned with and supported their CV. Note any gaps, over-claims, or missed opportunities to draw on their own experience.\n` : ''}
+    ${cvText ? `The candidate has provided a CV. It may be in Chinese — read it in its original language and assess whether their spoken English answers align with and are supported by the CV. Do NOT penalise the candidate for the CV being in Chinese — that's expected. The interview is conducted in English, so assess the interview in English. Note any gaps, over-claims, or missed opportunities to draw on their own experience.\n` : ''}
     
     Assess the candidate on:
     1. CONTENT & PORTFOLIO — Did they describe actual posts, reels, or designs they have made? Specific examples beat vague claims.

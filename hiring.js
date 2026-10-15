@@ -324,6 +324,7 @@ function attach(app) {
       let contextWithCv = context;
       if (cvText && cvText.trim()) {
         contextWithCv += `\n\nThe candidate has uploaded their CV. Use it to tailor your questions — ask about specific roles, projects, skills, or transitions mentioned in the CV. Do NOT read the CV back verbatim or ask them to summarise it. Do not say directly 'From your CV...'. Also, do ask entirely based on the CV. CV content:\n"""\n${cvText.trim().slice(0, 5000)}\n"""`;
+        contextWithCv += `\n\nNote: the candidate's CV may be in Chinese. Read it in its original language and ask about its content in English.`;
       }
 
       const convo = await createConversation({
