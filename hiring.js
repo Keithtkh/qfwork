@@ -129,10 +129,12 @@ async function sendHiringReportEmail(session, report, cvText, cvAttachment) {
         <h3>Concerns</h3>
         <ul>${concerns}</ul>
 
-        <h3>Detailed</h3>
-        <p><strong>Campaign Experience:</strong> ${report.campaignExperience}</p>
-        <p><strong>Technical Skills:</strong> ${report.technicalSkills}</p>
-        <p><strong>Strategic Thinking:</strong> ${report.strategicThinking}</p>
+        <h3>Detailed Assessment</h3>
+        <p><strong>Content & Portfolio:</strong> ${report.contentAndPortfolio}</p>
+        <p><strong>Platform Knowledge:</strong> ${report.platformKnowledge}</p>
+        <p><strong>Design Tools:</strong> ${report.designTools}</p>
+        <p><strong>Bilingual Ability:</strong> ${report.bilingualAbility}</p>
+        <p><strong>Startup Fit:</strong> ${report.startupFit}</p>
         <p><strong>Communication:</strong> ${report.communication}</p>
 
         ${cvBlock}
@@ -281,36 +283,53 @@ function attach(app) {
 
     try {
       const context = `
-        You are conducting a screening interview for a marketing role. The candidate's name is ${name}.
+        You are interviewing a freelance marketing candidate for QFwork, a Hong Kong AI workplace-communication startup.
+
+        The role: supporting QFwork's brand and promotions.
+        Responsibilities include:
+        - Driving branding and product marketing through online campaigns
+        - Setting up and managing social media (Instagram, LinkedIn, Rednote)
+        - Planning, designing, and posting 1-2 pieces of social content per week (posts / reels)
+        - Providing ongoing design support
+        Requirements include:
+        - Design tools (Canva, Adobe Illustrator, Figma)
+        - Comfortable working in a flexible early-stage startup environment
+        - Takes ownership of tasks, respects deadlines, communicates proactively
+        - Video editing (CapCut / Premiere Pro) is a plus
+        - Proficient in written Chinese and English
 
         Follow this flow:
-        1. OPENING — Greet them warmly and ask them to introduce themselves. ("Tell me a bit about yourself and your marketing background.")
-        2. EXPERIENCE — Ask about specific campaigns they have run. Probe for:
-            - What the campaign was
-            - What metrics they moved (conversion rates, ROAS, traffic, engagement)
-            - What tools they used (Google Analytics, HubSpot, SEO, paid ads, email marketing)
-            - What they would do differently
-        3. STRATEGY — Ask how they would approach a new market or product launch. Probe their reasoning.
-        4. CLOSING — Thank them and tell them the hiring manager will review the interview and be in touch.
+        1. OPENING — Greet the candidate warmly. Ask them to introduce themselves and their marketing / content background. ("Tell me a bit about yourself and why you are interested in this role.")
+        2. EXPERIENCE — Ask about specific content they have made. Probe for:
+        - What platforms they have managed (Instagram, LinkedIn, Rednote, etc.)
+        - Whether they can show or describe actual posts / reels they created
+        - Their design tools (Canva, Figma, Illustrator)
+        - Any video editing (CapCut, Premiere Pro)
+        - Examples of writing in Chinese and English
+        3. WORKING STYLE — Ask how they handle working in a small, fast-moving startup. Ask how they manage deadlines and communicate proactively.
+        4. AVAILABILITY & INTEREST — Ask about their interest in the freelance role and their capacity (1-2 posts per week).
+        5. CLOSING — Thank them and say the hiring manager will review and be in touch.
 
         RULES:
         - Ask ONE question at a time.
         - Keep each turn to 1-2 sentences.
         - React briefly to what they say before asking the next question.
+        - Focus on practical, portfolio-level experience, not abstract strategy.
+        - Do not ask about ROAS, conversion rates, or paid-ads metrics — this is an organic content and design role.
         - Never give feedback, corrections, or scores during the call.
-        - If they pause to think, wait patiently. Don't fill silence.
-        - After 4-5 minutes, move to the closing phase naturally.
+        - If they pause, wait patiently. Don't fill silence.
+        - After 4-5 minutes, move to the closing phase.
       `;
 
       let contextWithCv = context;
       if (cvText && cvText.trim()) {
-        contextWithCv += `\n\nThe candidate has uploaded their CV. Use it to tailor your questions — ask about specific roles, projects, skills, or transitions mentioned in the CV. Do NOT read the CV back verbatim or ask them to summarise it. CV content:\n"""\n${cvText.trim().slice(0, 5000)}\n"""`;
+        contextWithCv += `\n\nThe candidate has uploaded their CV. Use it to tailor your questions — ask about specific roles, projects, skills, or transitions mentioned in the CV. Do NOT read the CV back verbatim or ask them to summarise it. Do not say directly 'From your CV...'. Also, do ask entirely based on the CV. CV content:\n"""\n${cvText.trim().slice(0, 5000)}\n"""`;
       }
 
       const convo = await createConversation({
         conversationName: `Hiring — ${name}`,
         conversationalContext: contextWithCv,
-        customGreeting: `Hi ${name}, thanks for taking the time. Let's start — could you tell me a bit about yourself and your marketing background?`,
+        customGreeting: `Hi ${name}, thanks for taking the time. Let's start — could you tell me a bit about yourself and why you are interested in this role?`,
         personaId: process.env.TAVUS_HIRE_PERSONA_ID,
         maxSeconds: parseInt(process.env.TAVUS_HIRE_MAX_SECONDS || '600', 10)
       });
