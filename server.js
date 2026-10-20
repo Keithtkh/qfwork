@@ -10,13 +10,22 @@
 //  • POST /api/abandon              → best-effort end of an abandoned call (stops billing)
 //  • POST /api/issue-code           → issue a one-time trial code after a Calendly booking
 //  • POST /api/fillout-webhook      → receive webhook notifications from Fillout (Reserved for feature use)
+//  • GET  /api/plans                → the subscription plan (pricing section)
+//  • POST /api/offer                → start / resume a visitor's 24-hour offer
+//  • POST /api/checkout             → start a checkout, returns the provider's page
+//  • GET  /api/checkout/status      → polled by checkout-return.html
+//  • POST /api/payments/webhook     → provider events → code minted, renewals, cancellations
+//  • POST /api/billing/portal       → "manage subscription" (Stripe's own page)
+//  • GET  /api/billing/manage?code= → the same, from the link in the email
+//  • POST /api/recover              → "Lost your code?" — emails it
+//  • /api/admin/*                   → support tools, behind ADMIN_TOKEN (admin.js)
 //
 //  API credentials are read from the environment here on the server and
 //  are never exposed to the browser.
 //
 //  Everything that spends money — /api/analyze, /api/conversation and
 //  /api/interview-feedback — requires a trial session from /api/access.
-//  See access.js.
+//  See access.js; payments in payments.js; storage in db.js.
 // ============================================================
 
 const express = require('express');
@@ -27,20 +36,48 @@ require('dotenv').config();
 const { generateFeedback } = require('./feedback');
 const { analyzeVoice }     = require('./voice-metrics');
 const { createConversation, getConversationTranscript, endConversation, ensurePerceptionLayer } = require('./tavus');
-const access = require('./access');
-const hiring = require('./hiring');
+const access   = require('./access');
+const db       = require('./db');
+const payments = require('./payments');
+const email    = require('./email');
+const hiring   = require('./hiring');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+// Railway (and any other host) puts a proxy in front of us; without this every request
+// looks like it came from the proxy and the access-code rate limit becomes
+// global.
+app.set('trust proxy', 1);
+
+// ============================================================
+// POST /api/payments/webhook — the provider confirms a payment.
+// ------------------------------------------------------------
+// Registered BEFORE express.json(): the signature is computed over the exact
+// bytes received, and a parsed-then-re-serialised body would not match.
+// A 4xx tells the provider to stop retrying (bad signature); a 5xx tells it
+// to retry later (database down), which is safe because fulfilment is
+// idempotent.
+// ============================================================
+app.post('/api/payments/webhook', express.raw({ type: () => true, limit: '1mb' }), async (req, res) => {
+  if (!payments.enabled()) return res.status(404).end();
+  try {
+    await payments.handleWebhook(req.body, req.headers);
+    return res.status(200).json({ received: true });
+  } catch (e) {
+    if (/signature/i.test(e.message)) {
+      console.warn(`[payments] webhook rejected: ${e.message}`);
+      return res.status(400).json({ error: 'Invalid signature.' });
+    }
+    console.error(`[payments] webhook failed: ${e.message}`);
+    return res.status(500).json({ error: 'Webhook processing failed.' });
+  }
+});
+
 app.use(express.json({limit: '10mb'}));
 app.use(cors());
-
-// Railway and friends sit in front of us; without this every request looks
-// like it came from the proxy and the access-code rate limit becomes global.
-app.set('trust proxy', 1);
 
 // Make the live interview the front door.
 app.get('/', (req, res) => res.redirect('/exam.html'));
@@ -60,14 +97,25 @@ app.use(express.static('public'));
 // calls they get. A one-time code additionally carries its own run counter,
 // so a spent code is refused here rather than at the first call; see access.js.
 // ============================================================
-app.post('/api/access', (req, res) => {
-  if (!access.isConfigured()) {
+// Every database call on the money path goes through here: if the database is
+// unreachable the request fails CLOSED, never through to an uncharged call.
+function dbDown(res, e) {
+  console.error(`[db] ${e.message}`);
+  return res.status(503).json({ error: 'The service is temporarily unavailable. Please try again in a minute.', code: 'db-unavailable' });
+}
+
+app.post('/api/access', async (req, res) => {
+  if (!access.isConfigured() && !payments.enabled()) {
     return res.status(503).json({ error: 'The trial is not accepting codes right now. Please contact us for access.' });
   }
   if (access.tooManyAttempts(req.ip)) {
     return res.status(429).json({ error: 'Too many attempts. Please wait a minute and try again.' });
   }
-  const match = access.checkCode(req.body && req.body.code);
+  let match, spent;
+  try {
+    match = await access.checkCode(req.body && req.body.code);
+    spent = await access.trialSpent(match);
+  } catch (e) { return dbDown(res, e); }
   if (!match) {
     return res.status(401).json({ error: "That code isn't valid. Check it and try again, or contact us for access." });
   }
@@ -80,38 +128,156 @@ app.post('/api/access', (req, res) => {
 
   // A one-time code with nothing left. The booking link travels with the
   // refusal so the dead end still leads somewhere.
-  if (access.trialSpent(match.code)) {
+  if (spent) {
     console.log('[access] one-time code already spent');
     return res.status(403).json({
       error: 'This code has already been used. Book a free review with one of our recruitment experts to go further.',
       code:  'trial-spent',
-      calendlyUrl: process.env.CALENDLY_URL || ''
+      calendlyUrl: process.env.CALENDLY_URL || '',
+      canBuy:      payments.enabled()
     });
   }
 
   const token   = access.openSession(match.tier, match.code);
   const session = access.getSession(token);
-  console.log(`[access] ${match.tier} session opened${match.code ? ' (one-time code)' : ''}`);
+  let left, sub;
+  try {
+    left = await access.runsLeft(session);
+    sub  = await access.subInfo(session);
+  } catch (e) { return dbDown(res, e); }
+  console.log(`[access] ${match.tier} session opened${match.code ? (match.tier === 'paid' ? ` (subscriber, ${sub && sub.active ? 'active' : 'inactive'})` : ' (one-time code)') : ''}`);
   return res.status(200).json({
     ok: true,
     token,
     tier: match.tier,
-    runsLeft:    access.runsLeft(session),
+    runsLeft:    left,
+    sub,
     calendlyUrl: process.env.CALENDLY_URL || ''
   });
 });
 
-app.get('/api/access/verify', (req, res) => {
+app.get('/api/access/verify', async (req, res) => {
   const token   = req.get('X-QF-Access') || req.query.accessToken;
   const session = access.getSession(token);
   if (!session) return res.status(401).json({ ok: false });
+  let left, sub;
+  try {
+    left = await access.runsLeft(session);
+    sub  = await access.subInfo(session);
+  } catch (e) { return dbDown(res, e); }
   return res.status(200).json({
     ok: true,
     tier:        session.tier,
-    runsLeft:    access.runsLeft(session),
+    runsLeft:    left,
+    sub,
     calendlyUrl: process.env.CALENDLY_URL || ''
   });
 });
+
+
+// ============================================================
+// PAYMENTS (see payments.js) — a weekly subscription
+// ------------------------------------------------------------
+// GET  /api/plans                  → prices, allowance, coaching places left
+// POST /api/offer     { offerId? } → { offer: { id, expiresAt, active } | null }
+// POST /api/checkout  { offer? }   → { url }   (send the browser there)
+//      With a lapsed paid session (X-QF-Access) it resubscribes that code.
+// GET  /api/checkout/status?order= → { status, code?, email?, sub?, coachingUrl? }
+// POST /api/billing/portal         → { url }   (needs a paid session)
+// GET  /api/billing/manage?code=   → redirect to the provider's portal
+// POST /api/recover   { email }    → always { ok:true }
+// ============================================================
+function baseUrlOf(req) {
+  return (process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+}
+
+function payOff(res) {
+  return res.status(404).json({ error: 'Subscriptions are not open yet.' });
+}
+
+app.get('/api/plans', async (req, res) => {
+  try { return res.json(await payments.publicPlan()); } catch (e) { return dbDown(res, e); }
+});
+
+app.post('/api/offer', async (req, res) => {
+  if (!payments.enabled()) return payOff(res);
+  if (access.tooManyAttempts('offer:' + req.ip)) return res.status(429).json({ error: 'Too many requests.' });
+  try {
+    const o = await payments.startOffer(req.body && req.body.offerId);
+    return res.json({ offer: payments.offerSummary(o) });
+  } catch (e) { return dbDown(res, e); }
+});
+
+app.post('/api/checkout', async (req, res) => {
+  if (!payments.enabled()) return payOff(res);
+  if (access.tooManyAttempts('checkout:' + req.ip)) {
+    return res.status(429).json({ error: 'Too many attempts. Please wait a minute and try again.' });
+  }
+  const token   = req.get('X-QF-Access');
+  const session = token ? access.getSession(token) : null;
+  try {
+    const { url } = await payments.createCheckout({ offerId: req.body && req.body.offer, baseUrl: baseUrlOf(req), session });
+    return res.status(200).json({ url });
+  } catch (e) {
+    if (e.status) return res.status(e.status).json({ error: e.message, code: e.code });
+    console.error(`[payments] checkout failed: ${e.message}`);
+    return res.status(502).json({ error: 'Could not start the checkout. Please try again.' });
+  }
+});
+
+app.get('/api/checkout/status', async (req, res) => {
+  if (!payments.enabled()) return payOff(res);
+  try {
+    const st = await payments.status(req.query.order, baseUrlOf(req));
+    if (!st) return res.status(404).json({ error: 'Order not found.' });
+    return res.status(200).json(st);
+  } catch (e) { return dbDown(res, e); }
+});
+
+app.post('/api/billing/portal', async (req, res) => {
+  if (!payments.enabled()) return payOff(res);
+  const session = access.requireSession(req, res);
+  if (!session) return;
+  if (session.tier !== 'paid') return res.status(400).json({ error: 'No subscription on this code.' });
+  try {
+    const url = await payments.manageUrl(session.code, `${baseUrlOf(req)}/exam.html`);
+    if (!url) return res.status(404).json({ error: 'This subscription can’t be managed online. Contact us and we’ll help.' });
+    return res.json({ url });
+  } catch (e) {
+    console.error(`[payments] portal failed: ${e.message}`);
+    return res.status(502).json({ error: 'Could not open subscription settings. Please try again.' });
+  }
+});
+
+// The link in the welcome email. The code is the credential, as everywhere
+// else; rate-limited like the code check so it cannot be used to guess.
+app.get('/api/billing/manage', async (req, res) => {
+  const home = `${baseUrlOf(req)}/exam.html`;
+  if (!payments.enabled()) return res.redirect(home);
+  if (access.tooManyAttempts(req.ip)) return res.status(429).send('Too many attempts. Please wait a minute and try again.');
+  try {
+    const url = await payments.manageUrl(access.normCode(req.query.code), home);
+    if (!url) return res.status(404).send('We couldn’t find a subscription for that code. Reply to your welcome email and we’ll help.');
+    access.clearAttempts(req.ip);
+    return res.redirect(303, url);
+  } catch (e) {
+    console.error(`[payments] manage link failed: ${e.message}`);
+    return res.status(502).send('Could not open subscription settings. Please try again.');
+  }
+});
+
+app.post('/api/recover', async (req, res) => {
+  if (access.tooManyAttempts('recover:' + req.ip)) {
+    return res.status(429).json({ error: 'Too many attempts. Please wait a minute and try again.' });
+  }
+  try { await payments.recoverCodes(req.body && req.body.email, baseUrlOf(req)); }
+  catch (e) { console.error(`[payments] recovery failed: ${e.message}`); }
+  // Same answer either way, so this can't reveal who has subscribed.
+  return res.json({ ok: true });
+});
+
+payments.mountProviderRoutes(app);
+app.use('/api/admin', require('./admin'));
 
 
 // ============================================================
@@ -189,11 +355,25 @@ app.post('/api/conversation', async (req, res) => {
   // This is the moment Tavus starts billing, so it is also the moment the
   // trial run is charged. Doing it here (not in the browser) means a page
   // reload cannot hand someone a fresh set of runs.
-  const charged = access.consumeRun(session);
+  let charged;
+  try { charged = await access.consumeRun(session); } catch (e) { return dbDown(res, e); }
+  if (!charged.ok && charged.reason === 'week-used') {
+    return res.status(403).json({
+      error: "You've used this week's sessions. They reset when your plan renews.",
+      code:  'week-used'
+    });
+  }
+  if (!charged.ok && charged.reason === 'sub-inactive') {
+    return res.status(403).json({
+      error: 'Your subscription has ended. Subscribe again to keep practising.',
+      code:  'sub-inactive'
+    });
+  }
   if (!charged.ok) {
     return res.status(403).json({
       error: "You've used your trial session. Book a free review with one of our recruitment experts to go further.",
-      code:  'trial-spent'
+      code:  'trial-spent',
+      canBuy: payments.enabled()
     });
   }
   // Tailor the role-play to whatever the user told us about themselves.
@@ -234,8 +414,9 @@ app.post('/api/conversation', async (req, res) => {
     });
   } catch (error) {
     // The call never started, so nothing was billed — give the run back
-    // rather than burning a prospect's only try on our own outage.
-    session.runs = Math.max(0, session.runs - 1);
+    // rather than burning a prospect's only try (or a customer's paid
+    // session) on our own outage.
+    await access.refundRun(session).catch(e => console.error(`[access] refund failed: ${e.message}`));
     console.error('Create conversation error:', error.message);
     return res.status(502).json({ error: error.message });
   }
@@ -482,7 +663,30 @@ hiring.attach(app);
 
 const server = http.createServer(app);
 
-server.listen(PORT, () => {
+async function boot() {
+  try {
+    await db.init();
+    await access.importLegacyState();
+  } catch (e) {
+    console.error(`\nCannot start: database unavailable — ${e.message}`);
+    console.error(process.env.DATABASE_URL ? 'Check DATABASE_URL.' : 'The local PGlite store under .data/ could not be opened.');
+    process.exit(1);
+  }
+  // A misconfigured payment path either loses customers' money or gives
+  // sessions away, so it stops the boot rather than limping along.
+  const problems = payments.configProblems();
+  if (problems.length) {
+    console.error('\nCannot start: payments are misconfigured —');
+    problems.forEach(p => console.error(`  • ${p}`));
+    console.error('Fix the above, or unset PAYMENT_PROVIDER to run without payments.\n');
+    process.exit(1);
+  }
+  const t = await access.trialStats();
+  const coachingLeft = payments.enabled() ? await payments.coachingLeft() : 0;
+  server.listen(PORT, () => banner(t, coachingLeft));
+}
+
+function banner(t, coachingLeft) {
   const state = (ok) => ok ? 'configured' : 'MISSING';
   console.log(`\nQFwork.ai server listening on http://localhost:${PORT}`);
   console.log(`  Groq   : ${state(!!process.env.GROQ_API_KEY)}  (feedback report, speech-to-text)`);
@@ -495,13 +699,28 @@ server.listen(PORT, () => {
   const cap = (t) => `${access.runCap(t) === access.UNLIMITED ? 'unlimited runs' : `${access.runCap(t)} run(s)`}, ${mmss(access.callSeconds(t))}/call`;
   if (access.isConfigured()) {
     console.log(`  Access : demo code ${state(!!process.env.ACCESS_CODE_DEMO)} (${cap('demo')})  ·  sales code ${state(!!process.env.ACCESS_CODE_SALES)} (${cap('sales')})`);
-    const t = access.trialStats();
     console.log(t.total
       ? `  Trial  : ${t.total} one-time code(s) · ${t.used} used · ${t.total - t.used} left (${cap('sales')} each)`
       : `  Trial  : no one-time codes set — issue some into ACCESS_CODES_TRIAL`);
+  } else if (payments.enabled()) {
+    console.log(`  Access : no trial or demo codes set — only paid codes open the product`);
   } else {
     console.log(`  Access : NO CODES SET — the trial is closed to everyone. Set ACCESS_CODE_DEMO and/or ACCESS_CODES_TRIAL in .env`);
   }
+  console.log(`  DB     : ${db.label()}${db.kind() === 'pglite' && payments.isProduction() ? '  — NOT durable here: wiped on every deploy' : ''}`);
+  if (payments.enabled()) {
+    const p = payments.plan();
+    const key = String(process.env.PAYMENT_API_KEY || '');
+    const mode = payments.providerName() === 'mock' ? ' (placeholder — no real money)'
+               : key.startsWith('sk_test') ? ' (TEST mode)' : key.startsWith('sk_live') ? ' (LIVE — real charges)' : '';
+    const per = access.sessionsPerWeek();
+    console.log(`  Pay    : ${payments.providerName().toUpperCase()}${mode}  ·  offer ${payments.formatAmount(p.offerPrice, p.currency)}/wk for ${p.offerHours}h (${p.offerStart}), then ${payments.formatAmount(p.regularPrice, p.currency)}/wk`);
+    console.log(`  Plan   : ${per ? `${per} session(s)/week` : 'unlimited sessions'}, ${mmss(access.callSeconds('paid'))}/call  ·  coaching ${coachingLeft}/${p.coachingSlots} places left${p.coachingUrl ? '' : ' — COACHING_URL not set'}`);
+    console.log(`  Email  : ${email.enabled() ? `Resend, from ${process.env.EMAIL_FROM || 'QFwork.ai <hello@qfwork.ai>'}` : 'not configured — emails are printed here instead (set RESEND_API_KEY)'}`);
+  } else {
+    console.log(`  Pay    : off — set PAYMENT_PROVIDER to sell subscriptions`);
+  }
+  console.log(`  Admin  : ${process.env.ADMIN_TOKEN ? 'enabled (/api/admin, ADMIN_TOKEN)' : 'off — set ADMIN_TOKEN to enable /api/admin'}`);
   // With no URL the booking card is hidden rather than shown broken, so this
   // line is the only place a missing link becomes visible.
   console.log(process.env.CALENDLY_URL
@@ -542,45 +761,7 @@ server.listen(PORT, () => {
       .catch(e => console.log(`  Vision : ${p.label} persona — check failed: ${e.message}`));
   }
   console.log('');
-});
+}
 
-// ============================================================
-// POST /api/fillout-webhook - receive webhook notifications from Fillout (Reserved for feature use)
-// Called by fillout form with the invitee's email.
-// Fetch issueCode() to get available trial code
-// 
-// This api is reserved for future use and is not currently used in the application
-// In case it is replacing calendly booking in the future, book-confirm.html can be removed
-// ============================================================
-
-/*
-app.post('/api/fillout-webhook', express.json(), async (req, res) => {
-  console.log('[webhook] Full payload:', JSON.stringify(req.body, null, 2));
-
-  // The booking details live under submission.scheduling[0].value
-  const scheduling = req.body?.submission?.scheduling?.[0];
-  const email = scheduling?.value?.email;
-  const fullName = scheduling?.value?.fullName || '';
-
-  if (!email) {
-    console.error('[webhook] No email found in Fillout payload');
-    // Return 200 so Fillout doesn't retry endlessly on test payloads
-    return res.status(200).json({ ok: false, error: 'Missing email' });
-  }
-
-  try {
-    const code = access.issueCode(email);
-    if (!code) {
-      console.error('[webhook] No trial codes available');
-      return res.status(200).json({ ok: false, error: 'No codes available' });
-    }
-
-    await sendTrialCodeEmail(email, code, fullName);
-    console.log(`[webhook] Trial code sent to ${email}`);
-    res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error('[webhook] Failed to process booking:', error.message);
-    res.status(500).json({ ok: false, error: 'Internal error' });
-  }
-});
-*/
+// =====================================================
+boot();

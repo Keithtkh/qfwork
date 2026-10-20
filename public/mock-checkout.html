@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Test checkout — QFwork.ai</title>
+<meta name="robots" content="noindex" />
+<link rel="icon" href="logo-mark.png" />
+<!-- PLACEHOLDER for a real payment provider's hosted checkout
+     (PAYMENT_PROVIDER=mock, see providers/mock.js). Pay and Cancel ask the
+     server to send a signed webhook to itself, so the rest of the flow runs
+     exactly as it will with a real provider. No money moves. -->
+<style>
+  :root{ --ink:#1a1f36; --mut:#697386; --line:#e3e8ee; --accent:#635bff; --warn:#c2410c; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; min-height:100vh; background:#f6f9fc; color:var(--ink);
+        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
+  .banner{ background:#fff4ed; color:var(--warn); border-bottom:1px solid #f6ddd0; text-align:center;
+           padding:10px 16px; font-size:13px; font-weight:600; }
+  .wrap{ max-width:420px; margin:48px auto; padding:0 16px; }
+  .card{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:28px 24px;
+         box-shadow:0 2px 5px rgba(60,66,87,.08), 0 15px 35px rgba(60,66,87,.08); }
+  .merchant{ font-size:14px; color:var(--mut); margin:0 0 6px; }
+  .amount{ font-size:34px; font-weight:600; letter-spacing:-.02em; margin:0 0 4px; }
+  .item{ font-size:14px; color:var(--mut); margin:0 0 22px; }
+  .row{ display:flex; justify-content:space-between; padding:11px 0; border-top:1px solid var(--line); font-size:14px; }
+  .row span:first-child{ color:var(--mut); }
+  .fake{ margin:20px 0; padding:14px; border:1px dashed var(--line); border-radius:8px; font-size:13px; color:var(--mut); line-height:1.5; }
+  button{ width:100%; border:0; border-radius:8px; font:inherit; font-size:16px; font-weight:600; padding:13px; cursor:pointer; }
+  .pay{ background:var(--accent); color:#fff; }
+  .pay:hover{ filter:brightness(.94); }
+  .cancel{ margin-top:10px; background:none; color:var(--mut); font-size:14px; }
+  button:disabled{ opacity:.6; cursor:wait; }
+  .err{ color:#df1b41; font-size:13.5px; margin:12px 0 0; min-height:1em; }
+</style>
+</head>
+<body>
+<div class="banner">TEST MODE: placeholder checkout. No real payment is taken.</div>
+<div class="wrap">
+  <div class="card">
+    <p class="merchant">QFwork.ai</p>
+    <p class="amount" id="amount">…</p>
+    <p class="item" id="item">Loading order…</p>
+    <div class="row"><span>Order</span><span id="orderId"></span></div>
+    <div class="row"><span>Type</span><span id="kind"></span></div>
+    <label style="display:block;margin:18px 0 6px;font-size:13px;color:var(--mut);" for="email">Email (receives the access code)</label>
+    <input id="email" type="email" placeholder="you@example.com" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:11px 12px;font:inherit;font-size:15px;" />
+    <div class="fake">A real provider would show card, Apple&nbsp;Pay / Google&nbsp;Pay, Alipay, WeChat&nbsp;Pay or PayMe here. Press <b>Pay</b> to simulate subscribing.</div>
+    <button class="pay" id="payBtn" disabled>Pay</button>
+    <button class="cancel" id="cancelBtn" disabled>Cancel and return</button>
+    <p class="err" id="err" role="alert"></p>
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var order = new URLSearchParams(location.search).get('order') || '';
+
+  function act(action) {
+    $('payBtn').disabled = $('cancelBtn').disabled = true;
+    $('err').textContent = '';
+    fetch('/api/mock-checkout/' + encodeURIComponent(order) + '/' + action, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: $('email').value })
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (x) {
+        if (!x.ok) throw new Error(x.d.error || 'Failed');
+        location.href = x.d.redirect;
+      })
+      .catch(function (e) {
+        $('err').textContent = e.message;
+        $('payBtn').disabled = $('cancelBtn').disabled = false;
+      });
+  }
+
+  fetch('/api/mock-checkout/' + encodeURIComponent(order))
+    .then(function (r) { if (!r.ok) throw new Error('Unknown order.'); return r.json(); })
+    .then(function (o) {
+      $('amount').textContent = o.price;
+      $('item').textContent = 'Weekly plan · ' + o.price + ' per week' + (o.plan === 'offer' ? ' (launch offer)' : '');
+      $('orderId').textContent = order.slice(0, 12) + '…';
+      $('kind').textContent = o.resubscribe ? 'Resubscribe existing code' : 'New subscription';
+      $('payBtn').textContent = 'Subscribe · ' + o.price + '/week';
+      if (o.status !== 'pending') {
+        $('err').textContent = 'This order is already ' + o.status + '.';
+        $('cancelBtn').disabled = false;
+        $('cancelBtn').textContent = 'Return';
+        return;
+      }
+      $('payBtn').disabled = $('cancelBtn').disabled = false;
+    })
+    .catch(function (e) { $('item').textContent = e.message; });
+
+  $('payBtn').addEventListener('click', function () { act('pay'); });
+  $('cancelBtn').addEventListener('click', function () { act('cancel'); });
+})();
+</script>
+</body>
+</html>

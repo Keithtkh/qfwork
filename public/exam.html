@@ -39,8 +39,16 @@
                   display:grid; place-items:center; font-weight:700; font-size:13px; letter-spacing:.02em; }
   .brand{ font-weight:700; letter-spacing:-.01em; font-size:16px; }
   .brand span{ color:var(--teal); }
-  .topbar .right{ margin-left:auto; font-size:13px; color:var(--mut); }
-  @media (max-width:560px){ .topbar .right{ display:none; } }
+  .topbar .right{ margin-left:auto; display:flex; align-items:center; gap:16px; font-size:13px; color:var(--mut); }
+  @media (max-width:560px){ .topbar .tagline{ display:none; } }
+  .navlink{ color:var(--ink); font-weight:600; text-decoration:none; }
+  .navlink:hover{ color:var(--teal); }
+  /* Remaining paid sessions. A button: clicking it goes to pricing to top up. */
+  .bal{ border:1px solid #cfe8e4; background:#e9f6f4; color:var(--teal-d); border-radius:999px;
+        padding:5px 12px; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .bal:hover{ border-color:var(--teal); }
+  .bal.empty{ background:#fff4ed; border-color:#f6ddd0; color:var(--warn); }
+  [hidden]{ display:none !important; }
 
   main{ max-width:980px; margin:0 auto; padding:40px 22px 90px; }
   .view{ display:none; animation:rise .35s ease both; }
@@ -189,6 +197,54 @@
   @media (max-width:680px){
     .company-head h2{ font-size:23px; }
   }
+  /* ── HOME: pricing ──
+     Cards are built from GET /api/plans (PLANS on the server), so prices are
+     changed in one place. The whole section stays hidden while purchases are
+     off (no PAYMENT_PROVIDER). */
+  .pricing{ margin-top:52px; padding-top:38px; border-top:1px solid var(--line); scroll-margin-top:80px; }
+  .pricing-head{ max-width:620px; margin:0 0 24px; }
+  .pricing-head h2{ margin:0 0 8px; font-size:26px; letter-spacing:-.02em; font-weight:600; }
+  .pricing-head p{ margin:0; color:var(--mut); font-size:15px; line-height:1.55; }
+  .plans{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
+  .plan{ position:relative; background:var(--card); border:1px solid var(--line); border-radius:18px; padding:24px 22px 22px;
+         box-shadow:var(--shadow); display:flex; flex-direction:column; }
+  .plan.best{ border-color:var(--teal); box-shadow:0 0 0 3px rgba(13,122,111,.10), var(--shadow); }
+  .plan .tag{ position:absolute; top:-11px; left:20px; background:var(--teal); color:#fff; font-size:11px; font-weight:700;
+              letter-spacing:.06em; text-transform:uppercase; border-radius:999px; padding:3px 10px; }
+  .plan h3{ margin:0 0 12px; font-size:16px; }
+  .plan .price{ font-size:34px; font-weight:600; letter-spacing:-.02em; line-height:1; }
+  .plan .price small{ font-size:14px; color:var(--mut); font-weight:500; margin-left:3px; letter-spacing:0; }
+  .plan .per{ margin:6px 0 16px; font-size:13px; color:var(--mut); min-height:18px; }
+  .plan ul{ margin:0 0 20px; padding-left:18px; font-size:13.5px; color:var(--ink); line-height:1.5; flex:1; }
+  .plan li{ margin:4px 0; }
+  .plan .btn{ width:100%; }
+  .pricing-note{ margin:18px 0 0; color:var(--mut); font-size:13px; line-height:1.55; }
+  /* One weekly plan: a wide card with the offer countdown and the coaching bonus. */
+  .plans.single{ grid-template-columns:minmax(0,560px); }
+  .plan .was{ font-size:17px; color:var(--mut); text-decoration:line-through; margin-left:8px; font-weight:500; }
+  .offer-bar{ display:flex; align-items:center; gap:8px; margin:0 0 14px; padding:9px 12px; border-radius:10px;
+              background:#fff4ed; border:1px solid #f6ddd0; color:var(--warn); font-size:13px; font-weight:600; }
+  .offer-bar b{ font-variant-numeric:tabular-nums; }
+  .bonus{ margin:0 0 18px; padding:13px 14px; border-radius:12px; background:#f3fbf9; border:1px solid #cfe8e4;
+          font-size:13.5px; line-height:1.5; }
+  .bonus b{ color:var(--teal-d); }
+  .bonus .left{ display:block; margin-top:4px; font-size:12.5px; color:var(--mut); }
+  .pricing-err{ margin:12px 0 0; color:#dc2626; font-size:13.5px; min-height:1em; }
+  .test-flag{ display:inline-block; margin-left:8px; background:#fff4ed; color:var(--warn); border:1px solid #f6ddd0;
+              border-radius:999px; padding:2px 9px; font-size:11px; font-weight:700; letter-spacing:.05em;
+              text-transform:uppercase; vertical-align:middle; }
+  .buy-cta{ margin-top:20px; background:var(--card); border:1px solid var(--teal); border-radius:18px; padding:22px 24px;
+            display:flex; flex-wrap:wrap; align-items:center; gap:14px 22px; box-shadow:var(--shadow); }
+  .buy-cta div{ flex:1 1 280px; }
+  .buy-cta h3{ margin:0 0 4px; font-size:17px; }
+  .buy-cta p{ margin:0; color:var(--mut); font-size:14px; line-height:1.5; }
+  .buy-cta .btn{ width:auto; }
+  .lock-buy{ margin:9px 0 0; font-size:13px; }
+  .lock-buy a{ color:var(--teal); font-weight:600; }
+  .pc-bal{ margin:0 0 14px; font-size:13.5px; color:var(--mut); line-height:1.5; }
+  .pc-bal b{ color:var(--ink); }
+  .pc-bal.empty{ color:var(--warn); }
+
   /* ── PRECALL ── */
   .pc{ max-width:560px; margin:0 auto; background:var(--card); border:1px solid var(--line); border-radius:20px; padding:30px; box-shadow:var(--shadow); }
   .back{ background:none; border:0; color:var(--mut); font:inherit; cursor:pointer; padding:0; margin-bottom:20px; }
@@ -361,7 +417,7 @@
      Strips app chrome so the browser's own "Save as PDF" produces a clean
      document, and keeps report sections from splitting across pages. */
   @media print{
-    .topbar, .fb-actions, .back, .btn, .cta, .locked{ display:none !important; }
+    .topbar, .fb-actions, .back, .btn, .cta, .buy-cta, .locked{ display:none !important; }
     html,body{ background:#fff; }
     main{ max-width:none; padding:0; }
     .view{ display:none !important; }
@@ -388,7 +444,11 @@
     <img class="logo" src="logo-mark.png" alt="QFwork" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'logo logo-fallback',textContent:'QF'}))" />
     <div class="brand">QFwork<span>.ai</span></div>
   </a>
-  <div class="right">AI Trainer for workplace communication</div>
+  <div class="right">
+    <span class="tagline">AI Trainer for workplace communication</span>
+    <a class="navlink" id="navPricing" href="#pricing" hidden>Pricing</a>
+    <button class="bal" id="qfBal" type="button" hidden onclick="goPricing()" title="Buy more sessions"></button>
+  </div>
 </div>
 
 <main>
@@ -477,6 +537,19 @@
       </div>
     </section>
 
+    <!-- ── Pricing ──
+         Filled in from /api/plans by renderPricing(); hidden until purchases
+         are switched on. -->
+    <section class="pricing" id="pricing" aria-labelledby="pricingHead" hidden>
+      <div class="pricing-head">
+        <h2 class="serif" id="pricingHead">Subscribe<span class="test-flag" id="pricingTest" hidden>Test mode</span></h2>
+        <p>Practise every week. Each session is a live conversation with your AI partner and a full report — presence on camera, measured voice analysis, line-by-line rewrites and a model answer.</p>
+      </div>
+      <div class="plans" id="plans"></div>
+      <p class="pricing-err" id="pricingErr" role="alert"></p>
+      <p class="pricing-note">Renews weekly · cancel anytime. You'll get an access code on screen and by email — enter it on any device to practise.</p>
+    </section>
+
     <!-- ── Sponsors / partners ──
          Placeholder wordmarks live in /public/img/sponsors/sponsor-1..5.svg.
          Drop the real logos in with the same filenames (SVG or PNG, on a
@@ -553,6 +626,7 @@
         <p class="ex">Your CV is used only for this session. It is never stored or shared. The AI will tailor its questions to your CV, and your report will assess how well you used it.</p>
       </div>
 
+      <p class="pc-bal" id="pcBal" hidden></p>
       <div class="devnote">🎥 Next you'll check your camera and microphone. Your voice is recorded during the call and analysed for tone, pacing and clarity — it powers your feedback report and is discarded right after.</div>
       <button class="btn btn-primary" id="startBtn" onclick="startCall()">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
@@ -723,6 +797,194 @@ document.querySelectorAll('.scn').forEach(el =>
   })
 );
 
+// ── pricing & subscription ────────────────────────────────────
+// One weekly plan, from GET /api/plans. With no PAYMENT_PROVIDER on the
+// server, every buy surface below stays hidden.
+//
+// The limited-time offer: the server starts a visitor's 24 hours the first
+// time they see the pricing (or when we send them an offer link, ?offer=),
+// and only gives the offer price while it is live. The id is kept in this
+// browser so the countdown survives a reload.
+let PLANS  = { enabled:false };
+let OFFER  = null;           // { id, expiresAt, active }
+let offerTimer = null;
+const OFFER_KEY = 'qfOffer';
+
+function money(minor, currency){
+  const n = minor / 100;
+  const sym = currency === 'HKD' ? 'HK$' : currency + ' ';
+  return sym + (Number.isInteger(n) ? n : n.toFixed(2));
+}
+function fmtDate(d){
+  try { return new Date(d).toLocaleDateString(undefined, { weekday:'short', day:'numeric', month:'short' }); }
+  catch(e){ return ''; }
+}
+
+async function loadOffer(){
+  let id = '';
+  try {
+    id = new URLSearchParams(location.search).get('offer') || localStorage.getItem(OFFER_KEY) || '';
+  } catch(e){}
+  try{
+    const r = await fetch('/api/offer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ offerId: id }) });
+    const d = r.ok ? await r.json() : {};
+    OFFER = d.offer || null;
+    if(OFFER){ try { localStorage.setItem(OFFER_KEY, OFFER.id); } catch(e){} }
+  }catch(e){ OFFER = null; }
+}
+
+function offerLive(){
+  return !!(OFFER && OFFER.active && new Date(OFFER.expiresAt) > new Date());
+}
+
+function countdown(){
+  const ms = new Date(OFFER.expiresAt) - new Date();
+  if(ms <= 0) return '0:00:00';
+  const h = Math.floor(ms / 3600e3), m = Math.floor(ms % 3600e3 / 60e3), sec = Math.floor(ms % 60e3 / 1e3);
+  return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+function renderPricing(){
+  const on = !!PLANS.enabled;
+  $('pricing').hidden = !on;
+  $('navPricing').hidden = !on;
+  if(!on) return;
+  $('pricingTest').hidden = !PLANS.testMode;
+  clearInterval(offerTimer);
+
+  const P = PLANS, live = offerLive();
+  const price = live ? P.offerPrice : P.regularPrice;
+  const mins  = P.callSeconds ? Math.round(P.callSeconds / 60) : 0;
+  const sub   = QFAccess.sub();
+  const subscribed = QFAccess.tier() === 'paid' && sub && sub.active;
+  const bonus = P.coachingSlots && P.coachingLeft > 0 ? `
+      <div class="bonus"><b>Bonus for the first ${P.coachingSlots} subscribers:</b> a free 20-minute 1-on-1 career coaching session with Grace (normally HK$1,280 for 45 minutes).
+        <span class="left">${P.coachingLeft} of ${P.coachingSlots} places left</span></div>` : '';
+
+  $('plans').classList.add('single');
+  $('plans').innerHTML = `
+    <div class="plan best">
+      ${live ? '<span class="tag">Launch offer</span>' : ''}
+      ${live ? `<div class="offer-bar">⏱ Offer ends in <b id="offerLeft">${countdown()}</b></div>` : ''}
+      <h3>Weekly plan</h3>
+      <div class="price">${money(price, P.currency)}<small>/ week</small>${live && P.regularPrice > P.offerPrice ? `<span class="was">${money(P.regularPrice, P.currency)}</span>` : ''}</div>
+      <p class="per">${live ? 'Subscribe now and keep this price.' : ''}</p>
+      <ul>
+        <li>${P.sessionsPerWeek ? `${P.sessionsPerWeek} live AI practice session${P.sessionsPerWeek > 1 ? 's' : ''} every week` : 'Unlimited live AI practice sessions'}${mins ? `, up to ${mins} min each` : ''}</li>
+        <li>Full report every time — nothing locked</li>
+        <li>Any scenario, any device</li>
+        <li>Cancel anytime</li>
+      </ul>
+      ${bonus}
+      ${subscribed
+        ? `<button class="btn btn-secondary" type="button" style="width:100%;justify-content:center;" onclick="manageSubscription(this)">You're subscribed · Manage subscription</button>`
+        : `<button class="btn btn-primary" type="button" id="subscribeBtn">Subscribe for ${money(price, P.currency)}/week</button>`}
+    </div>`;
+  if(!subscribed) $('subscribeBtn').addEventListener('click', e => startCheckout(e.currentTarget));
+
+  if(live){
+    offerTimer = setInterval(() => {
+      if(!offerLive()){ clearInterval(offerTimer); return renderPricing(); }
+      const el = $('offerLeft'); if(el) el.textContent = countdown();
+    }, 1000);
+  }
+}
+
+// Off to Stripe's checkout. A lapsed subscriber signed in on their code
+// resubscribes that same code; the server decides from the X-QF-Access header.
+async function startCheckout(btn){
+  $('pricingErr').textContent = '';
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Opening checkout…';
+  try{
+    const r = await fetch('/api/checkout', {
+      method:'POST', headers:{'Content-Type':'application/json', ...QFAccess.headers()},
+      body: JSON.stringify({ offer: offerLive() ? OFFER.id : '' })
+    });
+    const data = await r.json().catch(() => ({}));
+    if(r.status === 409){ await QFAccess.refresh(); renderPricing(); renderBalance(); throw new Error(data.error); }
+    if(!r.ok || !data.url) throw new Error(data.error || 'Could not start the checkout.');
+    location.href = data.url;
+  }catch(e){
+    $('pricingErr').textContent = e.message + (/already/.test(e.message) ? '' : ' Please try again.');
+    btn.disabled = false; btn.textContent = label;
+  }
+}
+
+// Stripe's own page for updating the card or cancelling.
+async function manageSubscription(btn){
+  if(btn) btn.disabled = true;
+  try{
+    const r = await fetch('/api/billing/portal', { method:'POST', headers: QFAccess.headers() });
+    const d = await r.json().catch(() => ({}));
+    if(r.status === 401) return QFAccess.expired();
+    if(!r.ok || !d.url) throw new Error(d.error || 'Could not open subscription settings.');
+    location.href = d.url;
+  }catch(e){
+    alert(e.message);
+    if(btn) btn.disabled = false;
+  }
+}
+
+function goPricing(e){
+  if(e) e.preventDefault();
+  if(!PLANS.enabled) return;
+  show('home');
+  $('pricing').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+window.addEventListener('hashchange', () => { if(location.hash === '#pricing') goPricing(); });
+$('navPricing').addEventListener('click', goPricing);
+
+// The pill in the top bar and the line on the start-call screen. Only a
+// subscriber's code shows them — trial visitors are not shown a counter.
+function renderBalance(){
+  const paid = QFAccess.tier() === 'paid';
+  const sub  = QFAccess.sub();
+  const n    = QFAccess.runsLeft();
+  const pill = $('qfBal'), line = $('pcBal');
+  pill.hidden = line.hidden = !paid;
+  if(!paid) return;
+  const active = !!(sub && sub.active);
+  const resets = sub && sub.periodEnd ? fmtDate(sub.periodEnd) : '';
+  const manage = sub && sub.manageable ? ` · <button class="linkish" type="button" onclick="manageSubscription(this)">Manage subscription</button>` : '';
+  const signout = ` · <button class="linkish" type="button" onclick="signOut()">Sign out on this device</button>`;
+
+  pill.textContent = !active ? 'Subscription ended' : n == null ? 'Subscribed' : `${n} left this week`;
+  pill.classList.toggle('empty', !active || n === 0);
+  line.classList.toggle('empty', !active || n === 0);
+  line.innerHTML = !active
+    ? `Your subscription has ended. <button class="linkish" type="button" onclick="goPricing()">Subscribe again →</button>${signout}`
+    : n == null
+      ? `Subscribed — unlimited sessions.${manage}${signout}`
+      : n
+        ? `This call uses 1 of your <b>${n}</b> session${n === 1 ? '' : 's'} left this week${resets ? ` (resets ${resets})` : ''}.${manage}${signout}`
+        : `You've used this week's sessions${resets ? `. They reset ${resets}` : ''}.${manage}${signout}`;
+}
+function signOut(){ QFAccess.forget(); goHome(); renderPricing(); }
+document.addEventListener('qf-access-changed', () => { renderBalance(); if(PLANS.enabled) renderPricing(); });
+document.addEventListener('qf-access-granted', renderBalance);
+QFAccess.ready().then(renderBalance);
+
+Promise.all([QFAccess.plans(), loadOffer(), QFAccess.ready()]).then(([p]) => {
+  PLANS = p || PLANS;
+  renderPricing();
+  if(location.hash === '#pricing') setTimeout(goPricing, 60);
+});
+
+// Shown on gated reports and after a spent trial: the self-serve route to
+// the full report, alongside the expert booking.
+function buyCta(){
+  if(!PLANS.enabled) return '';
+  const price = money(offerLive() ? PLANS.offerPrice : PLANS.regularPrice, PLANS.currency);
+  return `<div class="buy-cta">
+    <div>
+      <h3>Get the full report every time</h3>
+      <p>Subscribe for ${price}/week: live practice every week, with the complete analysis — presence, measured voice, line-by-line rewrites and a model answer.</p>
+    </div>
+    <button class="btn btn-primary" type="button" onclick="goPricing()">See the plan</button>
+  </div>`;
+}
+
 // ── view switching (class-based, robust) ──
 function show(id){ ['home','precall','devcheck','room','busy','fb'].forEach(s => $(s).classList.toggle('active', s===id)); window.scrollTo(0,0); }
 function busy(text, sub){ $('busyText').textContent = text; $('busySub').textContent = sub || ''; show('busy'); }
@@ -890,6 +1152,12 @@ let dev = { stream:null, ctx:null, raf:null };
   // Re-checked rather than assumed: the precall form can sit open long enough
   // for the session to lapse, and the device check is a poor place to find out.
   QFAccess.require(async () => {
+    // A paid code at zero gets the buy screen now, not after the device check.
+    // The server still refuses the call either way.
+    if(QFAccess.tier() === 'paid' && QFAccess.runsLeft() === 0){
+      const sub = QFAccess.sub();
+      return showTrialSpent('', sub && sub.active ? 'week-used' : 'sub-inactive');
+    }
     state.userContext = $('ctx').value;
     show('devcheck');
     $('dcStatus').textContent = '';
@@ -1035,7 +1303,10 @@ async function joinCall(){
     });
     const data = await r.json();
     if(r.status === 401) return QFAccess.expired();
-    if(r.status === 403 && data.code === 'trial-spent') return showTrialSpent(data.error);
+    if(r.status === 403 && ['trial-spent','week-used','sub-inactive'].includes(data.code)){
+      if(data.code !== 'trial-spent') QFAccess.refresh();
+      return showTrialSpent(data.error, data.code);
+    }
     if(!r.ok) throw new Error(data.error || 'Could not start the session.');
     QFAccess.setRunsLeft(data.runsLeft);
 
@@ -1119,14 +1390,23 @@ async function endCall(reason){
   finally{ state.ending = false; $('endBtn').disabled = false; }
 }
 
-// The trial is spent (sales tier, cap reached). Nothing was billed — send them
-// to the consultation instead of a dead end.
-function showTrialSpent(msg){
+// No call could start: the trial is spent ('trial-spent'), a subscriber has
+// used this week's sessions ('week-used'), or the subscription has ended
+// ('sub-inactive'). Nothing was billed — point them somewhere useful.
+function showTrialSpent(msg, code){
   const url = QFAccess.calendlyUrl();
+  const sub = QFAccess.sub();
+  const resets = sub && sub.periodEnd ? fmtDate(sub.periodEnd) : '';
+  const copy = {
+    'week-used':    { t:'You’ve used this week’s sessions', m:`Your sessions reset${resets ? ' on ' + resets : ' when your plan renews'}. See you then!` },
+    'sub-inactive': { t:'Your subscription has ended',      m:'Subscribe again to keep practising — your code stays the same.' },
+    'trial-spent':  { t:'Your trial is complete',           m:'You’ve used your trial session.' }
+  }[code] || { t:'Your trial is complete', m:'You’ve used your trial session.' };
   $('fb').innerHTML = `
-    <div class="fb-head"><h1 class="fbtitle serif">Your trial is complete</h1></div>
-    <div class="sec"><p style="margin:0;line-height:1.6;">${escapeHtml(msg || 'You’ve used your trial session.')}</p></div>
-    ${bookingCta(url, 'trial-spent')}
+    <div class="fb-head"><h1 class="fbtitle serif">${copy.t}</h1></div>
+    <div class="sec"><p style="margin:0;line-height:1.6;">${escapeHtml(code === 'trial-spent' && msg ? msg : copy.m)}</p></div>
+    ${code === 'week-used' ? '' : buyCta()}
+    ${code === 'trial-spent' ? bookingCta(url, 'trial-spent') : ''}
     <p style="margin-top:16px;"><button class="linkish" onclick="goHome()">← Back to scenarios</button></p>`;
   show('fb');
 }
@@ -1156,6 +1436,7 @@ function lockedSec(title, why, extraClass){
     <h3>${title}<span class="lock-tag">🔒 In your review</span></h3>
     <div class="skel"><i></i><i></i><i></i><i></i><i></i></div>
     <p class="lock-why">${why}</p>
+    ${PLANS.enabled ? `<p class="lock-buy"><a href="#pricing" onclick="goPricing(event)">Included in the full report when you subscribe →</a></p>` : ''}
   </div>`;
 }
 
@@ -1271,6 +1552,7 @@ function renderFeedback(f, voiceStats, tier, locked){
     <p class="foot">${(hasVoice || lockedSet.has('voice'))
       ? 'This report combines the conversation transcript, real acoustic analysis of your recorded voice (pitch, pacing, clarity, energy) and live camera observations.'
       : 'Voice audio wasn’t captured for this call, so delivery notes are inferred from the transcript’s word patterns. Allow microphone access on this page to unlock measured tone, pacing and clarity feedback.'}</p>
+    ${gated ? buyCta() : ''}
     ${bookingCta(bookUrl, gated ? 'gated' : 'full')}
     <div class="fb-actions">
       <button class="btn btn-primary" style="width:auto;" onclick="location.reload()">Practise again</button>

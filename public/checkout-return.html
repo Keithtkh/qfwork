@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Payment — QFwork.ai</title>
+<meta name="robots" content="noindex" />
+<link rel="icon" href="logo-mark.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- The return page after checkout. It polls the order until the provider's
+     webhook has confirmed it, then shows the access code and signs this
+     browser in with it (QFAccess.redeem). The order id in the URL is the only
+     key to the code, so a refresh or a bookmark of this page still works. -->
+<script src="access-gate.js"></script>
+<style>
+  :root{ --teal:#0d7a6f; --teal-d:#0a5f56; --ink:#101828; --mut:#667085; --line:#e7eaee; --bg:#f6f8fa; --warn:#c2410c; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; min-height:100vh; display:grid; place-items:center; padding:24px 16px; background:var(--bg);
+        font-family:'Inter',system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--ink); -webkit-font-smoothing:antialiased; }
+  .card{ width:100%; max-width:460px; background:#fff; border:1px solid var(--line); border-radius:20px; padding:32px 28px;
+         box-shadow:0 1px 2px rgba(16,24,40,.04), 0 12px 32px rgba(16,24,40,.06); text-align:center; }
+  .brand{ display:flex; align-items:center; justify-content:center; gap:9px; margin-bottom:24px; font-weight:700; text-decoration:none; color:inherit; }
+  .brand img{ width:30px; height:30px; object-fit:contain; }
+  .brand span{ color:var(--teal); }
+  h1{ font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:25px; letter-spacing:-.015em; margin:0 0 10px; }
+  p{ margin:0 0 16px; color:var(--mut); line-height:1.55; font-size:15px; }
+  p b{ color:var(--ink); }
+  .spinner{ width:38px; height:38px; border:3px solid var(--line); border-top-color:var(--teal); border-radius:50%;
+            animation:spin 1s linear infinite; margin:4px auto 20px; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .tick{ width:48px; height:48px; border-radius:50%; background:#e9f6f4; color:var(--teal); display:grid; place-items:center; margin:0 auto 16px; }
+  .code{ margin:6px 0 8px; padding:16px 12px; border:1.5px dashed #9fd3cb; border-radius:14px; background:#f3fbf9;
+         font:600 22px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.06em; color:var(--ink); word-break:break-all; }
+  .copy{ border:0; background:none; color:var(--teal); font:inherit; font-size:13.5px; font-weight:600; cursor:pointer; padding:4px; }
+  .save{ margin:12px 0 22px; padding:12px 14px; background:#fff8eb; border:1px solid #f5e1b8; border-radius:12px;
+         font-size:13px; color:#7a5a12; text-align:left; line-height:1.5; }
+  .btn{ display:block; width:100%; border:0; border-radius:12px; background:var(--teal); color:#fff; font:inherit; font-size:16px;
+        font-weight:600; padding:14px 22px; text-decoration:none; cursor:pointer; }
+  .btn:hover{ background:var(--teal-d); }
+  .bonus{ margin:-8px 0 22px; padding:13px 14px; border-radius:12px; background:#f3fbf9; border:1px solid #cfe8e4;
+           font-size:14px; line-height:1.5; text-align:left; }
+  .bonus a{ display:inline-block; margin-top:4px; color:var(--teal); font-weight:600; }
+  .link{ display:inline-block; margin-top:14px; color:var(--teal); font-size:14px; font-weight:600; text-decoration:none; }
+  .err{ color:var(--warn); }
+  [hidden]{ display:none !important; }
+</style>
+</head>
+<body>
+<main class="card" aria-live="polite">
+  <a class="brand" href="exam.html"><img src="logo-mark.png" alt="" onerror="this.remove()" />QFwork<span>.ai</span></a>
+
+  <section id="pending">
+    <div class="spinner" aria-hidden="true"></div>
+    <h1>Confirming your payment…</h1>
+    <p id="pendingSub">This usually takes a few seconds. Please keep this page open.</p>
+  </section>
+
+  <section id="paid" hidden>
+    <div class="tick" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    <h1 id="paidTitle">You're subscribed</h1>
+    <p id="paidSub"></p>
+    <div class="code" id="code"></div>
+    <button class="copy" id="copyBtn" type="button">Copy code</button>
+    <div class="save"><b>Save this code.</b> It's your key to your subscription. This browser will remember it; enter it to practise on any other device. <span id="emailNote"></span></div>
+    <div class="bonus" id="coaching" hidden>
+      <b>You're one of our first subscribers.</b> Your free 20-minute 1-on-1 career coaching with Grace is included.
+      <a id="coachingLink" target="_blank" rel="noopener">Book your coaching session →</a>
+    </div>
+    <a class="btn" href="exam.html">Start practising</a>
+  </section>
+
+  <section id="cancelled" hidden>
+    <h1>Payment not completed</h1>
+    <p>Nothing was charged. You can subscribe whenever you're ready.</p>
+    <a class="btn" href="exam.html#pricing">Back to pricing</a>
+  </section>
+
+  <section id="missing" hidden>
+    <h1>We couldn't find that order</h1>
+    <p id="missingSub">Check that you opened the full link from the payment page. If you were charged, contact us and we'll sort it out.</p>
+    <a class="btn" href="exam.html">Go to QFwork.ai</a>
+    <a class="link" href="mailto:hello@qfwork.ai?subject=QFwork.ai%20payment">Contact us</a>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var params = new URLSearchParams(location.search);
+  var order = params.get('order') || '';
+  var started = Date.now();
+
+  function only(id) {
+    ['pending', 'paid', 'cancelled', 'missing'].forEach(function (s) { $(s).hidden = s !== id; });
+  }
+
+  function plan(sub) {
+    if (!sub) return '';
+    return sub.allowance
+      ? '<b>' + sub.allowance + ' session' + (sub.allowance === 1 ? '' : 's') + ' a week</b>, each with a full report.'
+      : '<b>Unlimited sessions</b>, each with a full report.';
+  }
+
+  async function showPaid(st) {
+    only('paid');
+    $('code').textContent = st.code;
+    $('paidSub').innerHTML = 'Your plan: ' + plan(st.sub) + ' Signing you in…';
+    if (st.emailed && st.email) $('emailNote').textContent = 'We’ve also emailed it to ' + st.email + '.';
+    if (st.coachingUrl) {
+      $('coachingLink').href = st.coachingUrl;
+      $('coaching').hidden = false;
+    }
+    var res = await QFAccess.redeem(st.code);
+    $('paidSub').innerHTML = 'Your plan: ' + plan(st.sub) + ' ' +
+      (res.ok ? 'You’re signed in on this device.' : 'Enter the code when you start a session.');
+  }
+
+  // Webhooks normally land within seconds. Poll briskly for a minute, then
+  // ease off; a payment that is still pending after ten minutes needs a human.
+  async function poll() {
+    if (!/^ord_[0-9a-f]{24}$/.test(order)) return only('missing');
+    var st;
+    try {
+      var r = await fetch('/api/checkout/status?order=' + encodeURIComponent(order));
+      if (r.status === 404) return only('missing');
+      st = r.ok ? await r.json() : null;
+    } catch (e) { st = null; }
+
+    if (st && st.status === 'paid' && st.code) return showPaid(st);
+    if (st && st.status === 'cancelled') return only('cancelled');
+
+    var waited = Date.now() - started;
+    // The provider sent the visitor back via its cancel link, and no payment
+    // has come through in a few seconds: treat it as abandoned.
+    if (params.get('cancelled') && waited > 4000) return only('cancelled');
+    if (waited > 10 * 60 * 1000) {
+      only('missing');
+      $('missingSub').textContent = 'Your payment is taking longer than usual to confirm. If you were charged, contact us with this page’s link and we’ll send your code.';
+      return;
+    }
+    if (waited > 60 * 1000) $('pendingSub').textContent = 'Still waiting for the payment provider to confirm. This page will update by itself.';
+    setTimeout(poll, waited > 60 * 1000 ? 5000 : 2000);
+  }
+
+  $('copyBtn').addEventListener('click', function () {
+    var text = $('code').textContent;
+    var done = function () { $('copyBtn').textContent = 'Copied'; setTimeout(function () { $('copyBtn').textContent = 'Copy code'; }, 1800); };
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () {});
+    else {
+      var range = document.createRange();
+      range.selectNodeContents($('code'));
+      var sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    }
+  });
+
+  poll();
+})();
+</script>
+</body>
+</html>

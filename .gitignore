@@ -33,3 +33,6 @@ npm-debug.log*
 # Hiring sessions state. Runtime state, not config — the issued list itself lives in HIRING_SESSIONS_STATE.
 hiring-sessions.json
 hiring-sessions.json.tmp
+
+# Local database used when DATABASE_URL is not set (PGlite, see db.js).
+.data/
