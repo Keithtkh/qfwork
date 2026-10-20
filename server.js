@@ -359,9 +359,12 @@ app.post('/api/conversation', async (req, res) => {
   try { charged = await access.consumeRun(session); } catch (e) { return dbDown(res, e); }
   if (!charged.ok && charged.reason === 'week-used') {
     return res.status(403).json({
-      error: "You've used this week's sessions. They reset when your plan renews.",
+      error: "You've used this week's practice minutes. They reset when your plan renews.",
       code:  'week-used'
     });
+  }
+  if (!charged.ok && charged.reason === 'busy') {
+    return res.status(409).json({ error: 'Another session is starting on this code. Please try again.' });
   }
   if (!charged.ok && charged.reason === 'sub-inactive') {
     return res.status(403).json({
@@ -391,7 +394,8 @@ app.post('/api/conversation', async (req, res) => {
   const personaId = scenario.personaIdEnv ? (process.env[scenario.personaIdEnv] || undefined) : undefined;
   // Per-call time limit for this session's tier — demos get their own, longer
   // cap; the sales tier keeps the shared 5 minutes.
-  const maxSeconds = access.callSeconds(session.tier);
+  // A subscriber's call is limited to the practice time it reserved.
+  const maxSeconds = charged.reserved || access.callSeconds(session.tier);
   try {
     const convo = await createConversation({
       conversationName:      `QFwork — ${scenarioTitle}`,
@@ -401,6 +405,12 @@ app.post('/api/conversation', async (req, res) => {
       personaId,
       maxSeconds
     });
+    // Track a subscriber's reserved minutes against this call, so the unused
+    // part is given back when it ends.
+    if (charged.reserved) {
+      await access.reserveCall(convo.conversation_id, session.code, charged.reserved)
+        .catch(e => console.error(`[access] could not record reservation: ${e.message}`));
+    }
     // Store the CV text in memory for the duration of the call, so it can be passed to the feedback generator at the end. It is never written to disk or logged.
     if (cvText && cvText.trim()) {
       cvStore.set(convo.conversation_id, cvText.trim().slice(0, 5000));
@@ -416,7 +426,7 @@ app.post('/api/conversation', async (req, res) => {
     // The call never started, so nothing was billed — give the run back
     // rather than burning a prospect's only try (or a customer's paid
     // session) on our own outage.
-    await access.refundRun(session).catch(e => console.error(`[access] refund failed: ${e.message}`));
+    await access.refundRun(session, charged.reserved).catch(e => console.error(`[access] refund failed: ${e.message}`));
     console.error('Create conversation error:', error.message);
     return res.status(502).json({ error: error.message });
   }
@@ -462,6 +472,7 @@ app.post('/api/abandon', async (req, res) => {
   if (conversationId) {
     console.log(`[tavus] call abandoned, ending conversation ${conversationId}`);
     endConversation(conversationId); // best-effort, don't block the response
+    access.settleCall(conversationId).catch(e => console.error(`[access] settle failed: ${e.message}`));
     voiceStore.delete(conversationId);
   }
   return res.status(204).end();
@@ -490,6 +501,9 @@ app.post('/api/interview-feedback', async (req, res) => {
       : Promise.resolve(null);
 
     await endConversation(conversationId); // stop the stream so the transcript finalises
+    // Charge a subscriber only for the minutes the call actually ran. Done now,
+    // not after the transcript wait below, so the wait is not billed.
+    await access.settleCall(conversationId).catch(e => console.error(`[access] settle failed: ${e.message}`));
 
     // The transcript is NOT ready the instant a call ends — poll for it,
     // breaking as soon as we have the candidate's speech.
@@ -714,8 +728,9 @@ function banner(t, coachingLeft) {
     const mode = payments.providerName() === 'mock' ? ' (placeholder — no real money)'
                : key.startsWith('sk_test') ? ' (TEST mode)' : key.startsWith('sk_live') ? ' (LIVE — real charges)' : '';
     const per = access.sessionsPerWeek();
+    const mins = access.minutesPerWeek();
     console.log(`  Pay    : ${payments.providerName().toUpperCase()}${mode}  ·  offer ${payments.formatAmount(p.offerPrice, p.currency)}/wk for ${p.offerHours}h (${p.offerStart}), then ${payments.formatAmount(p.regularPrice, p.currency)}/wk`);
-    console.log(`  Plan   : ${per ? `${per} session(s)/week` : 'unlimited sessions'}, ${mmss(access.callSeconds('paid'))}/call  ·  coaching ${coachingLeft}/${p.coachingSlots} places left${p.coachingUrl ? '' : ' — COACHING_URL not set'}`);
+    console.log(`  Plan   : ${mins ? `${mins} min/week` : 'unlimited minutes'}, ${per ? `${per} session(s)/week` : 'unlimited sessions'}, up to ${mmss(access.callSeconds('paid'))}/call  ·  coaching ${coachingLeft}/${p.coachingSlots} places left${p.coachingUrl ? '' : ' — COACHING_URL not set'}`);
     console.log(`  Email  : ${email.enabled() ? `Resend, from ${process.env.EMAIL_FROM || 'QFwork.ai <hello@qfwork.ai>'}` : 'not configured — emails are printed here instead (set RESEND_API_KEY)'}`);
   } else {
     console.log(`  Pay    : off — set PAYMENT_PROVIDER to sell subscriptions`);

@@ -65,8 +65,9 @@ function subRow(r) {
     status:    r.status,
     periodEnd: r.period_end,
     cancelAtPeriodEnd: r.cancel_at_period_end,
-    usedThisPeriod: Number(r.sessions_used),
-    allowance: r.sessions_per_period != null ? Number(r.sessions_per_period) : access.sessionsPerWeek(),
+    sessionsThisPeriod: Number(r.sessions_used),
+    minutesUsed: Math.round(Number(r.seconds_used || 0) / 60 * 10) / 10,
+    minutesAllowed: r.seconds_per_period != null ? Math.round(Number(r.seconds_per_period) / 60) : access.minutesPerWeek(),
     coaching:  r.coaching,
     note:      r.note,
     created:   r.created_at
@@ -103,17 +104,17 @@ router.get('/codes/:code', wrap(async (req, res) => {
   res.json({ ...subRow(r.rows[0]), checkouts: c.rows });
 }));
 
-// A complimentary code: active for N weeks, the normal weekly allowance for
-// each of them. Not tied to any payment, so it simply stops at the end date.
+// A complimentary code: active for N weeks, with the normal weekly minutes
+// for each of them. Not tied to any payment, so it simply stops at the end date.
 router.post('/codes', wrap(async (req, res) => {
   const weeks = parseInt(req.body && req.body.weeks, 10);
   if (!(weeks > 0 && weeks <= 52)) return res.status(400).json({ error: 'weeks must be 1–52.' });
   const code = access.newPaidCode();
-  const perWeek = access.sessionsPerWeek();
+  const perWeek = access.minutesPerWeek() * 60;
   const note = String((req.body && req.body.note) || 'issued by admin').slice(0, 200);
   const emailAddr = req.body && req.body.email ? String(req.body.email).trim().slice(0, 254) : null;
   await db.query(
-    `INSERT INTO subscriptions (code, provider, email, plan, status, period_start, period_end, sessions_per_period, note)
+    `INSERT INTO subscriptions (code, provider, email, plan, status, period_start, period_end, seconds_per_period, note)
      VALUES ($1, 'manual', $2, 'complimentary', 'active', now(), now() + make_interval(weeks => $3), $4, $5)`,
     [code, emailAddr, weeks, perWeek ? perWeek * weeks : 0, note]);
   console.log(`[admin] issued a free code for ${weeks} week(s) — ${note}`);
@@ -124,13 +125,13 @@ router.post('/codes/:code/extend', wrap(async (req, res) => {
   const code  = access.normCode(req.params.code);
   const weeks = parseInt(req.body && req.body.weeks, 10);
   if (!(weeks > 0 && weeks <= 52)) return res.status(400).json({ error: 'weeks must be 1–52.' });
-  const perWeek = access.sessionsPerWeek();
+  const perWeek = access.minutesPerWeek() * 60;
   // Only free codes: a paid subscription's dates belong to the provider and
   // would be overwritten by its next webhook.
   const r = await db.query(
     `UPDATE subscriptions SET
         period_end = GREATEST(period_end, now()) + make_interval(weeks => $2),
-        sessions_per_period = CASE WHEN $3 = 0 THEN 0 ELSE COALESCE(sessions_per_period, 0) + $3 * $2 END,
+        seconds_per_period = CASE WHEN $3 = 0 THEN 0 ELSE COALESCE(seconds_per_period, 0) + $3 * $2 END,
         status = 'active', updated_at = now()
       WHERE code = $1 AND provider = 'manual' RETURNING *`, [code, weeks, perWeek]);
   if (!r.rows.length) return res.status(404).json({ error: 'No such free code. Paid subscriptions are managed in Stripe.' });

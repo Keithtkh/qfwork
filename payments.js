@@ -241,7 +241,7 @@ const FULFIL_SQL = `
     subscription_id = EXCLUDED.subscription_id, email = COALESCE(EXCLUDED.email, subscriptions.email),
     plan = EXCLUDED.plan, amount = EXCLUDED.amount, currency = EXCLUDED.currency,
     status = EXCLUDED.status, period_start = EXCLUDED.period_start, period_end = EXCLUDED.period_end,
-    cancel_at_period_end = EXCLUDED.cancel_at_period_end, sessions_used = 0, updated_at = now()
+    cancel_at_period_end = EXCLUDED.cancel_at_period_end, sessions_used = 0, seconds_used = 0, updated_at = now()
   RETURNING code, (xmax = 0) AS inserted`;
 
 async function getCheckout(orderId) {
@@ -302,7 +302,7 @@ async function fulfil(evt, baseUrl) {
       code:        display,
       startUrl:    `${base}/exam.html?code=${encodeURIComponent(display)}`,
       manageUrl:   `${base}/api/billing/manage?code=${encodeURIComponent(display)}`,
-      allowance:   access.sessionsPerWeek(),
+      minutes:     access.minutesPerWeek(),
       coachingUrl: coaching ? plan().coachingUrl : ''
     }).catch(e => console.error(`[email] ${e.message}`));
   }
@@ -314,12 +314,13 @@ async function cancelCheckout(orderId) {
 }
 
 // Renewals, failed payments and cancellations. The billing period moving on
-// resets the week's session count.
+// resets the week's practice minutes and session count.
 async function syncSubscription(subscriptionId, sub) {
   const r = await db.query(
     `UPDATE subscriptions SET
         status = $2,
         sessions_used = CASE WHEN period_start IS DISTINCT FROM $3 THEN 0 ELSE sessions_used END,
+        seconds_used  = CASE WHEN period_start IS DISTINCT FROM $3 THEN 0 ELSE seconds_used END,
         period_start = $3, period_end = $4, cancel_at_period_end = $5, updated_at = now()
       WHERE subscription_id = $1
       RETURNING code`,
@@ -417,6 +418,7 @@ async function publicPlan() {
     regularPrice:    cfg.regularPrice,
     interval:        cfg.interval,
     offerHours:      cfg.offerHours,
+    minutesPerWeek:  access.minutesPerWeek(),
     sessionsPerWeek: access.sessionsPerWeek(),
     callSeconds:     access.callSeconds('paid'),
     coachingSlots:   cfg.coachingSlots,

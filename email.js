@@ -69,8 +69,8 @@ function button(href, label) {
 }
 
 // After a successful checkout.
-function welcome({ to, code, startUrl, manageUrl, allowance, coachingUrl }) {
-  const sessions = allowance ? `${allowance} live practice session${allowance === 1 ? '' : 's'} every week` : 'unlimited live practice sessions';
+function welcome({ to, code, startUrl, manageUrl, minutes, coachingUrl }) {
+  const sessions = minutes ? `${minutes} minutes of live AI practice every week, over as many sessions as you like` : 'unlimited live AI practice';
   const coaching = coachingUrl ? `
     <div style="margin:20px 0 0;padding:14px 16px;background:#fff8eb;border:1px solid #f5e1b8;border-radius:12px;font-size:14px;line-height:1.5;">
       <b>You're one of our first subscribers.</b> Your free 20-minute 1-on-1 career coaching session with Grace is included.<br>

@@ -141,7 +141,7 @@ Set `CALENDLY_URL` to the booking link for that consultation. If it is unset the
 
 ### Payments and the database
 
-A third tier, **paid**, is a **weekly subscription**. There are no user accounts: subscribing mints an **access code** (`QF-7KQ2-M9XD-4TPA`) that works while the subscription is active, with a weekly allowance of sessions (`SUB_SESSIONS_PER_WEEK`) and the complete report. The code is shown on the return page, emailed (Resend), and remembered by the browser; "Lost your code?" in the code prompt emails it again.
+A third tier, **paid**, is a **weekly subscription**. There are no user accounts: subscribing mints an **access code** (`QF-7KQ2-M9XD-4TPA`) that works while the subscription is active, with a weekly budget of practice minutes (`SUB_MINUTES_PER_WEEK`, 10) over any number of sessions, and the complete report. Each call reserves what is left of the week (that becomes its Tavus time limit) and gives back the unused part when it ends, so subscribers pay only for the time they talk. The code is shown on the return page, emailed (Resend), and remembered by the browser; "Lost your code?" in the code prompt emails it again.
 
 ```
 pricing card → POST /api/checkout → Stripe Checkout (cards, Apple Pay, Google Pay)
@@ -153,7 +153,7 @@ later       → webhooks for renewals, failed payments, cancellations keep statu
 - **Launch offer.** `SUB_OFFER_PRICE` for `OFFER_HOURS` (24) from when a visitor first sees the pricing, or from when an offer link is created (`POST /api/admin/offer-link`, for WhatsApp). Then `SUB_REGULAR_PRICE`. Subscribers keep the price they signed up at. The checkout itself expires with the offer.
 - **First subscribers' bonus.** The first `COACHING_SLOTS` (30) subscribers get the coaching booking link (`COACHING_URL`) in their email and on the return page, claimed with one conditional `UPDATE`.
 - **Provider.** `payments.js` is provider-neutral; `providers/stripe.js` is the real one and `providers/mock.js` a placeholder with a fake checkout page. Stripe's product and prices are created on first use and replaced automatically when the prices in `.env` change. The mock is refused in production unless `ALLOW_MOCK_PAYMENTS=true`.
-- **Safe by construction.** Prices are set by the server and recorded at checkout; a webhook reporting a different amount is not fulfilled. Duplicate webhooks do nothing. If the webhook is late, the return page asks Stripe directly. Charging a session is one conditional `UPDATE`, and a call that fails to start is refunded — for trial codes too.
+- **Safe by construction.** Prices are set by the server and recorded at checkout; a webhook reporting a different amount is not fulfilled. Duplicate webhooks do nothing. If the webhook is late, the return page asks Stripe directly. Reserving minutes only succeeds if nothing changed since they were read, so two calls cannot spend the same minutes, and a call that fails to start is refunded — for trial codes too.
 - **Manage / cancel.** Subscribers open Stripe's Customer Portal from the app or from the link in their email.
 - **Database.** `db.js` uses Postgres when `DATABASE_URL` is set (Neon in production) and otherwise PGlite — real Postgres in-process, under `.data/` — so development needs no setup. The host's disk (Railway, Render) is wiped on every deploy, so the server refuses to start with payments on and no `DATABASE_URL` in production. If the database is unreachable, the paid paths fail closed with a 503.
 - **Support.** With `ADMIN_TOKEN` set, `/api/admin` shows stats and subscriptions, issues free codes for N weeks, makes offer links, and exports everything — see the header of `admin.js`.
@@ -231,7 +231,8 @@ Run `npm run check` at any time to verify that the configured personas belong to
 | `ALLOW_MOCK_PAYMENTS` | No | `true` to allow the mock provider in production (staging only) |
 | `PAYMENT_API_KEY`, `PAYMENT_WEBHOOK_SECRET` | With Stripe | Secret key and webhook signing secret |
 | `SUB_OFFER_PRICE`, `SUB_REGULAR_PRICE`, `SUB_CURRENCY` | No | Weekly prices (placeholders 38 / 58 HKD) |
-| `SUB_SESSIONS_PER_WEEK` | No | Weekly allowance, default `3`; `0` = unlimited |
+| `SUB_MINUTES_PER_WEEK` | No | Practice minutes per week, default `10`; `0` = unlimited |
+| `SUB_SESSIONS_PER_WEEK` | No | Sessions per week, default `0` = unlimited |
 | `OFFER_HOURS`, `OFFER_START` | No | Launch-offer window (24h) and when it starts (`view` or `link`) |
 | `COACHING_SLOTS`, `COACHING_URL` | No | First-subscribers coaching bonus and its booking link |
 | `RESEND_API_KEY`, `EMAIL_FROM` | Recommended | Email the access code; blank prints emails to the log |

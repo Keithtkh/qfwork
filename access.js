@@ -66,8 +66,9 @@ function normCode(s) {
 // cut off at the shared 5-minute TAVUS_MAX_CALL_SECONDS like a prospect.
 // TAVUS_MAX_CALL_SECONDS_DEMO overrides it for our own demos; blank falls back
 // to the shared value so nothing changes for the sales tier.
-// TAVUS_MAX_CALL_SECONDS_PAID does the same for paying customers, whose
-// session is a product rather than a taste of one.
+// TAVUS_MAX_CALL_SECONDS_PAID does the same for subscribers. Blank lets one
+// call use the whole weekly budget (SUB_MINUTES_PER_WEEK); a subscriber's
+// call is also cut to whatever is left of that budget (consumeRun).
 function callSeconds(tier) {
   const shared = parseInt(process.env.TAVUS_MAX_CALL_SECONDS || '300', 10);
   const base   = Number.isFinite(shared) && shared > 0 ? shared : 300;
@@ -75,7 +76,9 @@ function callSeconds(tier) {
             : tier === 'paid' ? process.env.TAVUS_MAX_CALL_SECONDS_PAID
             : null;
   const n = parseInt(own, 10);
-  return Number.isFinite(n) && n > 0 ? n : base;
+  if (Number.isFinite(n) && n > 0) return n;
+  if (tier === 'paid' && minutesPerWeek()) return minutesPerWeek() * 60;
+  return base;
 }
 
 // Number of runs a tier gets. Blank or 0 in the environment means unlimited.
@@ -254,12 +257,30 @@ function displayCode(code) {
   return 'QF-' + c.slice(2).match(/.{4}/g).join('-');
 }
 
-// Sessions a subscriber gets per billing period (a week). 0 or blank means
-// unlimited. A code can override it (sessions_per_period), e.g. a
-// complimentary code issued by admin for several weeks.
+// What a subscription buys per billing period (a week): minutes of live
+// practice, spread over as many sessions as the subscriber likes. Both are
+// 0 = unlimited. A code can override them (seconds_per_period,
+// sessions_per_period), e.g. a complimentary code issued for several weeks.
+function minutesPerWeek() {
+  const n = parseInt(process.env.SUB_MINUTES_PER_WEEK, 10);
+  return Number.isFinite(n) && n >= 0 ? n : 10;
+}
+
 function sessionsPerWeek() {
   const n = parseInt(process.env.SUB_SESSIONS_PER_WEEK, 10);
-  return Number.isFinite(n) && n >= 0 ? n : 3;
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+// No call starts with less than this left: a 20-second call is no use to
+// anyone and still costs a Tavus connection.
+const MIN_CALL_SECONDS = 60;
+
+function budgetSeconds(sub) {
+  return sub.seconds_per_period != null ? Number(sub.seconds_per_period) : minutesPerWeek() * 60;
+}
+
+function sessionCap(sub) {
+  return sub.sessions_per_period != null ? Number(sub.sessions_per_period) : sessionsPerWeek();
 }
 
 // A subscription renews at period_end, and the provider's webhook saying so
@@ -278,13 +299,17 @@ async function subscription(code) {
 // What the client is told about a subscriber's plan.
 function subSummary(sub) {
   if (!sub) return null;
-  const allowance = sub.sessions_per_period != null ? Number(sub.sessions_per_period) : sessionsPerWeek();
+  const allowance = sessionCap(sub);
+  const budget    = budgetSeconds(sub);
+  const secsUsed  = Number(sub.seconds_used || 0);
   return {
     active:            !!sub.live,
     status:            sub.status,
     periodEnd:         sub.period_end,
     cancelAtPeriodEnd: !!sub.cancel_at_period_end,
-    allowance:         allowance || null,                 // null → unlimited
+    minutes:           budget ? Math.round(budget / 60) : null,           // null → unlimited
+    secondsLeft:       budget ? Math.max(0, budget - secsUsed) : null,
+    allowance:         allowance || null,                                 // sessions; null → unlimited
     used:              Number(sub.sessions_used),
     coaching:          !!sub.coaching,
     manageable:        sub.provider !== 'manual' && !!sub.customer_id
@@ -372,6 +397,7 @@ async function runsLeft(session) {
   if (session.tier === 'paid') {
     const sub = subSummary(await subscription(session.code));
     if (!sub || !sub.active) return 0;
+    if (sub.secondsLeft != null && sub.secondsLeft < MIN_CALL_SECONDS) return 0;
     if (!sub.allowance) return null;
     return Math.max(0, sub.allowance - sub.used);
   }
@@ -391,23 +417,36 @@ async function runsLeft(session) {
 // buy another call. Each charge is a single conditional UPDATE, so two calls
 // started at the same instant on the same code cannot both slip under the cap.
 // For the shared env codes it lands on the session, as before.
-// Resolves to { ok:true, runsLeft } or { ok:false, reason }.
+//
+// A subscriber's call RESERVES practice time: everything left this week, up
+// to the per-call cap. That becomes the call's Tavus time limit, so the
+// budget can never be overrun. settleCall() gives back the unused part when
+// the call ends. The reservation only lands if the row is unchanged since it
+// was read, so two calls started together cannot both take the same minutes.
+//
+// Resolves to { ok:true, runsLeft, reserved? } or { ok:false, reason }.
 async function consumeRun(session) {
   if (session.tier === 'paid') {
-    const r = await db.query(
-      `UPDATE subscriptions SET sessions_used = sessions_used + 1, updated_at = now()
-        WHERE code = $1
-          AND status = ANY($3) AND period_end + ${GRACE} > now()
-          AND (COALESCE(sessions_per_period, $2) = 0 OR sessions_used < COALESCE(sessions_per_period, $2))
-        RETURNING sessions_used, COALESCE(sessions_per_period, $2) AS allowance`,
-      [session.code, sessionsPerWeek(), LIVE_STATUSES]);
-    if (!r.rows.length) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       const sub = await subscription(session.code);
-      return { ok: false, reason: sub && sub.live ? 'week-used' : 'sub-inactive' };
+      if (!sub || !sub.live) return { ok: false, reason: 'sub-inactive' };
+      const cap = sessionCap(sub);
+      if (cap && Number(sub.sessions_used) >= cap) return { ok: false, reason: 'week-used' };
+      const budget = budgetSeconds(sub);
+      const left = budget ? budget - Number(sub.seconds_used) : Infinity;
+      const reserve = Math.min(callSeconds('paid'), left);
+      if (reserve < MIN_CALL_SECONDS) return { ok: false, reason: 'week-used' };
+      const r = await db.query(
+        `UPDATE subscriptions SET seconds_used = seconds_used + $2, sessions_used = sessions_used + 1, updated_at = now()
+          WHERE code = $1 AND seconds_used = $3 AND sessions_used = $4
+          RETURNING code`,
+        [session.code, reserve, Number(sub.seconds_used), Number(sub.sessions_used)]);
+      if (r.rows.length) {
+        session.runs++;
+        return { ok: true, runsLeft: cap ? Math.max(0, cap - Number(sub.sessions_used) - 1) : null, reserved: reserve };
+      }
     }
-    session.runs++;
-    const allowance = Number(r.rows[0].allowance);
-    return { ok: true, runsLeft: allowance ? Math.max(0, allowance - Number(r.rows[0].sessions_used)) : null };
+    return { ok: false, reason: 'busy' };
   }
 
   const cap = runCap(session.tier);
@@ -436,13 +475,47 @@ async function consumeRun(session) {
 // create the conversation). Lands wherever consumeRun charged it — before
 // this existed, only the session counter was decremented, so a one-time code
 // stayed charged for our own outage.
-async function refundRun(session) {
+async function refundRun(session, reserved) {
   session.runs = Math.max(0, session.runs - 1);
   if (session.tier === 'paid') {
-    await db.query('UPDATE subscriptions SET sessions_used = GREATEST(sessions_used - 1, 0) WHERE code = $1', [session.code]);
+    await db.query(
+      `UPDATE subscriptions SET sessions_used = GREATEST(sessions_used - 1, 0),
+              seconds_used = GREATEST(seconds_used - $2, 0) WHERE code = $1`,
+      [session.code, Number(reserved) || 0]);
   } else if (session.code && runCap(session.tier) !== UNLIMITED) {
     await db.query('UPDATE trial_code_runs SET runs = GREATEST(runs - 1, 0), updated_at = now() WHERE code = $1', [session.code]);
   }
+}
+
+
+// Record a started subscriber call against its reservation.
+async function reserveCall(conversationId, code, reserved) {
+  await db.query(
+    `INSERT INTO call_reservations (conversation_id, code, reserved) VALUES ($1, $2, $3)
+     ON CONFLICT (conversation_id) DO NOTHING`, [conversationId, code, reserved]);
+}
+
+// The call has ended: charge the time it actually ran (from when it was
+// created — when Tavus starts billing — to now) and give the rest of the
+// reservation back. Runs once per call; later calls for the same id do
+// nothing. A call that is never settled keeps its whole reservation, which
+// is also the most Tavus could have billed for it.
+async function settleCall(conversationId) {
+  if (!conversationId) return null;
+  const r = await db.query(
+    `WITH c AS (
+       UPDATE call_reservations SET settled_at = now()
+        WHERE conversation_id = $1 AND settled_at IS NULL
+        RETURNING code, reserved,
+                  LEAST(reserved, GREATEST(0, CEIL(EXTRACT(EPOCH FROM now() - started_at))::int)) AS used
+     )
+     UPDATE subscriptions s SET seconds_used = GREATEST(s.seconds_used - (c.reserved - c.used), 0), updated_at = now()
+       FROM c WHERE s.code = c.code
+     RETURNING c.used, c.reserved`, [String(conversationId)]);
+  if (!r.rows.length) return null;
+  const { used, reserved } = r.rows[0];
+  console.log(`[access] subscriber call settled — ${Math.round(used)}s used of ${reserved}s reserved`);
+  return { used: Number(used), reserved: Number(reserved) };
 }
 
 
@@ -520,6 +593,9 @@ module.exports = {
   subSummary,
   subInfo,
   sessionsPerWeek,
+  minutesPerWeek,
+  reserveCall,
+  settleCall,
   normCode,
   tooManyAttempts,
   clearAttempts,

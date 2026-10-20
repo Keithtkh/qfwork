@@ -57,8 +57,8 @@ const SCHEMA = `
   -- One row per access code with a subscription behind it. Stored normalised
   -- (lowercase alphanumerics), the same form access.js compares against.
   -- The provider is the source of truth for status and billing period; the
-  -- webhook keeps these columns in step. sessions_used counts calls in the
-  -- current period and resets when the period moves on.
+  -- webhook keeps these columns in step. seconds_used (practice time) and
+  -- sessions_used count the current period and reset when it moves on.
   CREATE TABLE IF NOT EXISTS subscriptions (
     code                  TEXT PRIMARY KEY,
     provider              TEXT NOT NULL,      -- stripe | mock | manual
@@ -74,12 +74,28 @@ const SCHEMA = `
     cancel_at_period_end  BOOLEAN NOT NULL DEFAULT false,
     sessions_used         INTEGER NOT NULL DEFAULT 0 CHECK (sessions_used >= 0),
     sessions_per_period   INTEGER,            -- NULL → SUB_SESSIONS_PER_WEEK
+    seconds_used          INTEGER NOT NULL DEFAULT 0,
+    seconds_per_period    INTEGER,            -- NULL → SUB_MINUTES_PER_WEEK × 60
     coaching              BOOLEAN NOT NULL DEFAULT false,
     note                  TEXT,
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
   );
   CREATE INDEX IF NOT EXISTS subscriptions_email ON subscriptions (lower(email));
+  -- Databases created before the minutes budget existed.
+  ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS seconds_used INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS seconds_per_period INTEGER;
+
+  -- A subscriber's call reserves practice time when it starts (up to what is
+  -- left this week) and gives back what it did not use when it ends. Kept in
+  -- the database so a restart mid-call cannot lose the refund.
+  CREATE TABLE IF NOT EXISTS call_reservations (
+    conversation_id  TEXT PRIMARY KEY,
+    code             TEXT NOT NULL,
+    reserved         INTEGER NOT NULL,      -- seconds
+    started_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    settled_at       TIMESTAMPTZ
+  );
 
   -- Limited-time offers. A visitor's 24 hours start when they first see the
   -- pricing (or when an admin creates a link for them); the offer price is

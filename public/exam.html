@@ -854,7 +854,6 @@ function renderPricing(){
 
   const P = PLANS, live = offerLive();
   const price = live ? P.offerPrice : P.regularPrice;
-  const mins  = P.callSeconds ? Math.round(P.callSeconds / 60) : 0;
   const sub   = QFAccess.sub();
   const subscribed = QFAccess.tier() === 'paid' && sub && sub.active;
   const bonus = P.coachingSlots && P.coachingLeft > 0 ? `
@@ -870,7 +869,8 @@ function renderPricing(){
       <div class="price">${money(price, P.currency)}<small>/ week</small>${live && P.regularPrice > P.offerPrice ? `<span class="was">${money(P.regularPrice, P.currency)}</span>` : ''}</div>
       <p class="per">${live ? 'Subscribe now and keep this price.' : ''}</p>
       <ul>
-        <li>${P.sessionsPerWeek ? `${P.sessionsPerWeek} live AI practice session${P.sessionsPerWeek > 1 ? 's' : ''} every week` : 'Unlimited live AI practice sessions'}${mins ? `, up to ${mins} min each` : ''}</li>
+        <li>${P.minutesPerWeek ? `${P.minutesPerWeek} minutes of live AI practice every week` : 'Unlimited live AI practice'}</li>
+        <li>${P.sessionsPerWeek ? `Up to ${P.sessionsPerWeek} session${P.sessionsPerWeek > 1 ? 's' : ''} a week` : 'As many sessions as you like'}</li>
         <li>Full report every time — nothing locked</li>
         <li>Any scenario, any device</li>
         <li>Cancel anytime</li>
@@ -949,16 +949,20 @@ function renderBalance(){
   const manage = sub && sub.manageable ? ` · <button class="linkish" type="button" onclick="manageSubscription(this)">Manage subscription</button>` : '';
   const signout = ` · <button class="linkish" type="button" onclick="signOut()">Sign out on this device</button>`;
 
-  pill.textContent = !active ? 'Subscription ended' : n == null ? 'Subscribed' : `${n} left this week`;
-  pill.classList.toggle('empty', !active || n === 0);
-  line.classList.toggle('empty', !active || n === 0);
+  // Minutes are the budget; whole minutes, rounded down, are what's shown.
+  const secs = sub ? sub.secondsLeft : null;
+  const mins = secs == null ? null : Math.floor(secs / 60);
+  const out  = !active || n === 0;
+  pill.textContent = !active ? 'Subscription ended' : mins == null ? 'Subscribed' : `${mins} min left this week`;
+  pill.classList.toggle('empty', out);
+  line.classList.toggle('empty', out);
   line.innerHTML = !active
     ? `Your subscription has ended. <button class="linkish" type="button" onclick="goPricing()">Subscribe again →</button>${signout}`
-    : n == null
-      ? `Subscribed — unlimited sessions.${manage}${signout}`
-      : n
-        ? `This call uses 1 of your <b>${n}</b> session${n === 1 ? '' : 's'} left this week${resets ? ` (resets ${resets})` : ''}.${manage}${signout}`
-        : `You've used this week's sessions${resets ? `. They reset ${resets}` : ''}.${manage}${signout}`;
+    : out
+      ? `You've used this week's practice minutes${resets ? `. They reset ${resets}` : ''}.${manage}${signout}`
+      : mins == null
+        ? `Subscribed — unlimited practice.${manage}${signout}`
+        : `You have <b>${mins} min</b> of practice left this week${resets ? ` (resets ${resets})` : ''}. This call can run until it's used up; you're only charged for the time you talk.${manage}${signout}`;
 }
 function signOut(){ QFAccess.forget(); goHome(); renderPricing(); }
 document.addEventListener('qf-access-changed', () => { renderBalance(); if(PLANS.enabled) renderPricing(); });
@@ -1309,6 +1313,7 @@ async function joinCall(){
     }
     if(!r.ok) throw new Error(data.error || 'Could not start the session.');
     QFAccess.setRunsLeft(data.runsLeft);
+    if(QFAccess.tier() === 'paid') QFAccess.refresh();     // minutes now reserved for this call
 
     state.conversationId = data.conversationId;
     state.scenarioPrompt = data.scenarioPrompt || '';
@@ -1386,6 +1391,7 @@ async function endCall(reason){
     if(!r.ok) throw new Error(data.error || 'Could not generate feedback.');
     state.conversationId = null;            // call fully finished — nothing to abandon
     renderFeedback(data.feedback, data.voiceStats, data.tier, data.locked);
+    if(QFAccess.tier() === 'paid') QFAccess.refresh();     // unused minutes have been given back
   }catch(e){ showError(e.message); }
   finally{ state.ending = false; $('endBtn').disabled = false; }
 }
@@ -1398,7 +1404,7 @@ function showTrialSpent(msg, code){
   const sub = QFAccess.sub();
   const resets = sub && sub.periodEnd ? fmtDate(sub.periodEnd) : '';
   const copy = {
-    'week-used':    { t:'You’ve used this week’s sessions', m:`Your sessions reset${resets ? ' on ' + resets : ' when your plan renews'}. See you then!` },
+    'week-used':    { t:'You’ve used this week’s practice time', m:`Your minutes reset${resets ? ' on ' + resets : ' when your plan renews'}. See you then!` },
     'sub-inactive': { t:'Your subscription has ended',      m:'Subscribe again to keep practising — your code stays the same.' },
     'trial-spent':  { t:'Your trial is complete',           m:'You’ve used your trial session.' }
   }[code] || { t:'Your trial is complete', m:'You’ve used your trial session.' };

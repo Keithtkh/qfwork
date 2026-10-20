@@ -99,9 +99,9 @@
 
   function plan(sub) {
     if (!sub) return '';
-    return sub.allowance
-      ? '<b>' + sub.allowance + ' session' + (sub.allowance === 1 ? '' : 's') + ' a week</b>, each with a full report.'
-      : '<b>Unlimited sessions</b>, each with a full report.';
+    return sub.minutes
+      ? '<b>' + sub.minutes + ' minutes of practice a week</b>, over as many sessions as you like, each with a full report.'
+      : '<b>Unlimited practice</b>, each session with a full report.';
   }
 
   async function showPaid(st) {
