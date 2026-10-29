@@ -731,7 +731,7 @@ function banner(t, coachingLeft) {
     const mins = access.minutesPerWeek();
     console.log(`  Pay    : ${payments.providerName().toUpperCase()}${mode}  ·  offer ${payments.formatAmount(p.offerPrice, p.currency)}/wk for ${p.offerHours}h (${p.offerStart}), then ${payments.formatAmount(p.regularPrice, p.currency)}/wk`);
     console.log(`  Plan   : ${mins ? `${mins} min/week` : 'unlimited minutes'}, ${per ? `${per} session(s)/week` : 'unlimited sessions'}, up to ${mmss(access.callSeconds('paid'))}/call  ·  coaching ${coachingLeft}/${p.coachingSlots} places left${p.coachingUrl ? '' : ' — COACHING_URL not set'}`);
-    console.log(`  Email  : ${email.enabled() ? `Resend, from ${process.env.EMAIL_FROM || 'QFwork.ai <hello@qfwork.ai>'}` : 'not configured — emails are printed here instead (set RESEND_API_KEY)'}`);
+    console.log(`  Email  : ${email.enabled() ? `Resend, from ${process.env.EMAIL_FROM || 'QFwork.ai <hello@qfworkai.com>'}` : 'not configured — emails are printed here instead (set RESEND_API_KEY)'}`);
   } else {
     console.log(`  Pay    : off — set PAYMENT_PROVIDER to sell subscriptions`);
   }

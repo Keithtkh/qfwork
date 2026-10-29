@@ -10,12 +10,12 @@
 // testing, and nothing is lost if the key is missing in production (the
 // code is still on the return page, and "Lost your code?" can resend it).
 //
-// EMAIL_FROM must be on a domain verified in Resend (e.g. hello@qfwork.ai).
+// EMAIL_FROM must be on a domain verified in Resend (e.g. hello@qfworkai.com).
 // Before the domain is verified, Resend's own onboarding@resend.dev works,
 // but only for sending to the Resend account owner's address.
 // ============================================================
 
-const FROM = () => process.env.EMAIL_FROM || 'QFwork.ai <hello@qfwork.ai>';
+const FROM = () => process.env.EMAIL_FROM || 'QFwork.ai <hello@qfworkai.com>';
 
 function enabled() {
   return !!process.env.RESEND_API_KEY;
