@@ -90,7 +90,10 @@ async function createCheckout({ order, returnUrl, cancelUrl, expiresAt, customer
     metadata: { order_id: order.id },
     subscription_data: { metadata: { order_id: order.id } },
     success_url: returnUrl,
-    cancel_url: cancelUrl
+    cancel_url: cancelUrl,
+    // Charge and SHOW the price in HKD only. Without this, Stripe's Adaptive
+    // Pricing may convert it into the visitor's local currency on the page.
+    adaptive_pricing: { enabled: false }
   };
   // A returning subscriber is billed on their existing Stripe customer, so
   // their card and invoices stay in one place.

@@ -230,7 +230,7 @@ Run `npm run check` at any time to verify that the configured personas belong to
 | `PAYMENT_PROVIDER` | No | `stripe`, or `mock` (placeholder); blank turns subscriptions off |
 | `ALLOW_MOCK_PAYMENTS` | No | `true` to allow the mock provider in production (staging only) |
 | `PAYMENT_API_KEY`, `PAYMENT_WEBHOOK_SECRET` | With Stripe | Secret key and webhook signing secret |
-| `SUB_OFFER_PRICE`, `SUB_REGULAR_PRICE`, `SUB_CURRENCY` | No | Weekly prices (placeholders 38 / 58 HKD) |
+| `SUB_OFFER_PRICE`, `SUB_REGULAR_PRICE` | No | Weekly prices in HKD (placeholders 38 / 58); HKD only, no currency conversion |
 | `SUB_MINUTES_PER_WEEK` | No | Practice minutes per week, default `10`; `0` = unlimited |
 | `SUB_SESSIONS_PER_WEEK` | No | Sessions per week, default `0` = unlimited |
 | `OFFER_HOURS`, `OFFER_START` | No | Launch-offer window (24h) and when it starts (`view` or `link`) |

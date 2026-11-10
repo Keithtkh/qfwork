@@ -98,7 +98,6 @@ function intEnv(envName, fallback) {
 // the host's variables) needs a restart but no code change.
 //   SUB_OFFER_PRICE    launch-offer weekly price   (placeholder 38)
 //   SUB_REGULAR_PRICE  weekly price after the offer (placeholder 58)
-//   SUB_CURRENCY       HKD
 //   OFFER_HOURS        how long the offer lasts    (24)
 //   OFFER_START        view → starts when pricing is first seen; link → only
 //                      admin-made links carry the offer
@@ -106,7 +105,7 @@ function intEnv(envName, fallback) {
 //   COACHING_URL       booking link for it (falls back to CALENDLY_URL)
 function plan() {
   return {
-    currency:     String(process.env.SUB_CURRENCY || 'HKD').trim().toUpperCase(),
+    currency:     'HKD',          // HKD only — see providers/stripe.js (adaptive pricing off)
     offerPrice:   money('SUB_OFFER_PRICE', 38),
     regularPrice: money('SUB_REGULAR_PRICE', 58),
     interval:     'week',
