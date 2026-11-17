@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings - QFwork.ai</title>
+  <link rel="icon" href="logo-mark.png" />
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f6f8fa; color: #101828; margin: 0; padding: 0; }
+    
+    /* Top Bar */
+    .topbar { background: #fff; border-bottom: 1px solid #e7eaee; padding: 15px 26px; display: flex; align-items: center; gap: 11px; }
+    .topbar a { display: flex; align-items: center; gap: 11px; text-decoration: none; color: inherit; }
+    .topbar img { width: 34px; height: 34px; }
+    .brand { font-weight: 700; font-size: 16px; color: #101828; }
+    .brand span { color: #FC5603; }
+
+    /* Main Container */
+    .container { max-width: 500px; margin: 40px auto; padding: 0 20px; }
+    
+    /* Go Back Button */
+    .back-link { display: inline-block; margin-bottom: 20px; color: #667085; font-size: 14px; font-weight: 600; text-decoration: none; transition: 0.2s; }
+    .back-link:hover { color: #FC5603; }
+
+    /* Cards */
+    .card { background: #fff; padding: 30px; border-radius: 16px; border: 1px solid #e7eaee; box-shadow: 0 4px 12px rgba(0,0,0,0.03); margin-bottom: 20px; }
+    h2 { margin-top: 0; font-size: 20px; margin-bottom: 20px; }
+    
+    /* Inputs */
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #101828; margin-top: 16px; }
+    input { width: 100%; padding: 12px 14px; border: 1px solid #e7eaee; border-radius: 10px; box-sizing: border-box; font-family: inherit; font-size: 15px; transition: 0.2s; }
+    input:focus { outline: none; border-color: #FC5603; box-shadow: 0 0 0 3px rgba(252,86,3,0.1); }
+    
+    /* Buttons */
+    .btn-primary { background: linear-gradient(135deg, #FC5603, #FDA307); color: white; border: none; padding: 12px 20px; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; width: 100%; margin-top: 20px; font-family: inherit; transition: 0.2s; }
+    .btn-primary:hover { filter: brightness(1.05); }
+    
+    /* Messages */
+    .msg { font-size: 13px; margin-top: 12px; font-weight: 500; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="/dashboard.html">
+      <img src="logo-mark.png" alt="" />
+      <div class="brand">QFwork<span>.ai</span></div>
+    </a>
+  </div>
+
+  <div class="container">
+    
+    <!-- Go Back Button -->
+    <a href="/dashboard.html" class="back-link">← Back to Dashboard</a>
+
+    <!-- Email Settings -->
+    <div class="card">
+      <h2>Change Email</h2>
+      <label for="newEmail">New Email Address</label>
+      <input type="email" id="newEmail" placeholder="Enter new email" />
+      <button class="btn-primary" onclick="updateEmail()">Update Email</button>
+      <div id="emailMsg" class="msg"></div>
+    </div>
+
+    <!-- Password Settings -->
+    <div class="card">
+      <h2>Change Password</h2>
+      <label for="currentPassword">Current Password</label>
+      <input type="password" id="currentPassword" placeholder="Enter current password" />
+      
+      <label for="newPassword">New Password</label>
+      <input type="password" id="newPassword" placeholder="Enter new password" />
+      
+      <button class="btn-primary" onclick="updatePassword()">Update Password</button>
+      <div id="passMsg" class="msg"></div>
+    </div>
+
+    <!-- Danger Zone -->
+    <div class="card" style="border-color: #fecaca; background: #fffcfc; margin-top: 40px;">
+      <h2 style="color: #dc2626;">Danger Zone</h2>
+      <p style="font-size: 14px; color: #667085; line-height: 1.5; margin-bottom: 20px;">
+        Once you delete your account, there is no going back. All your interview reports, transcripts, and personal data will be permanently deleted.
+      </p>
+      <button class="btn-primary" style="background: #dc2626; background-image: none;" onclick="deleteAccount()">Delete My Account</button>
+    </div>
+  </div>
+
+  <script>
+    // Check if the user just clicked the verification link
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('emailUpdated') === 'true') {
+      const msg = document.getElementById('emailMsg');
+      msg.style.color = '#15803d';
+      msg.textContent = 'Email successfully updated!';
+    }
+
+    async function updateEmail() {
+      const newEmail = document.getElementById('newEmail').value;
+      const msg = document.getElementById('emailMsg');
+      
+      if (!newEmail) {
+        msg.style.color = '#dc2626';
+        msg.textContent = 'Please enter a new email address.';
+        return;
+      }
+
+      msg.style.color = '#667085';
+      msg.textContent = 'Sending verification link...';
+
+      try {
+        const res = await fetch('/api/auth/update-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ newEmail })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+          msg.style.color = '#15803d';
+          msg.textContent = 'Verification link sent! Check your new inbox to confirm.';
+          document.getElementById('newEmail').value = '';
+        } else {
+          msg.style.color = '#dc2626';
+          msg.textContent = data.error || 'Failed to update email.';
+        }
+      } catch (err) {
+        msg.style.color = '#dc2626';
+        msg.textContent = 'Network error.';
+      }
+    }
+
+    async function updatePassword() {
+      const currentPassword = document.getElementById('currentPassword').value;
+      const newPassword = document.getElementById('newPassword').value;
+      const msg = document.getElementById('passMsg');
+      
+      if (!currentPassword || !newPassword) {
+        msg.style.color = '#dc2626';
+        msg.textContent = 'Please fill in both fields.';
+        return;
+      }
+
+      msg.style.color = '#667085';
+      msg.textContent = 'Updating...';
+
+      try {
+        const res = await fetch('/api/auth/update-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currentPassword, newPassword })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+          msg.style.color = '#15803d';
+          msg.textContent = 'Password updated successfully!';
+          document.getElementById('currentPassword').value = '';
+          document.getElementById('newPassword').value = '';
+        } else {
+          msg.style.color = '#dc2626';
+          msg.textContent = data.error || 'Failed to update password.';
+        }
+      } catch (err) {
+        msg.style.color = '#dc2626';
+        msg.textContent = 'Network error.';
+      }
+    }
+
+    async function deleteAccount() {
+      // 1. Double confirmation
+      const firstConfirm = confirm("Are you absolutely sure you want to delete your account? This action cannot be undone.");
+      if (!firstConfirm) return;
+
+      const secondConfirm = prompt("Please type DELETE to confirm you want to permanently delete your account and all reports.");
+      if (secondConfirm !== "DELETE") {
+        return alert("Account deletion cancelled.");
+      }
+
+      // 2. Call the API
+      try {
+        const res = await fetch('/api/auth/delete-account', {
+          method: 'DELETE'
+        });
+        
+        if (res.ok) {
+          // 3. Redirect to home page (they will be logged out)
+          alert("Your account has been permanently deleted.");
+          window.location.href = '/exam.html';
+        } else {
+          const data = await res.json();
+          alert(data.error || 'Failed to delete account.');
+        }
+      } catch (err) {
+        alert('Network error. Please try again.');
+      }
+    }
+  </script>
+</body>
+</html>

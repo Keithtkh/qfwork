@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Dashboard - QFwork.ai</title>
+  <link rel="icon" href="logo-mark.png" />
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f6f8fa; color: #101828; margin: 0; padding: 0; }
+    
+    /* Top Bar */
+    .topbar { background: #fff; border-bottom: 1px solid #e7eaee; padding: 15px 26px; display: flex; align-items: center; gap: 11px; }
+    .topbar a { display: flex; align-items: center; gap: 11px; text-decoration: none; color: inherit; }
+    .topbar img { width: 34px; height: 34px; }
+    .brand { font-weight: 700; font-size: 16px; color: #101828; }
+    .brand span { color: #FC5603; }
+
+    /* Main Container */
+    .container { max-width: 800px; margin: 40px auto; padding: 0 20px; }
+    
+    /* Go Back Button */
+    .back-link { display: inline-block; margin-bottom: 20px; color: #667085; font-size: 14px; font-weight: 600; text-decoration: none; transition: 0.2s; }
+    .back-link:hover { color: #FC5603; }
+
+    /* Cards / Tabs */
+    .card { background: #fff; padding: 24px 30px; border-radius: 16px; border: 1px solid #e7eaee; box-shadow: 0 4px 12px rgba(0,0,0,0.03); margin-bottom: 20px; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e7eaee; padding-bottom: 16px; margin-bottom: 20px; }
+    
+    /* Typography */
+    h1 { margin: 0; font-size: 22px; }
+    p.subtitle { margin: 4px 0 0 0; color: #667085; font-size: 14px; }
+    
+    /* Buttons */
+    .btn-action { text-decoration: none; background: #f6f8fa; color: #101828; border: 1px solid #e7eaee; padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; font-family: inherit; transition: 0.2s; }
+    .btn-action:hover { background: #e7eaee; }
+    
+    .btn-logout { background: #ef4444; color: white; border: 1px solid #ef4444; }
+    .btn-logout:hover { background: #dc2626; border-color: #dc2626; }
+
+    /* Report List */
+    .report-card { border: 1px solid #e7eaee; border-radius: 12px; padding: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; transition: 0.2s; }
+    .report-card:hover { border-color: #FC5603; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .report-title { font-weight: 600; font-size: 16px; margin: 0 0 4px 0; }
+    .report-meta { font-size: 13px; color: #667085; margin: 0; }
+    
+    /* Score & View Button */
+    .score-badge { background: #e9f6f4; color: #0d7a6f; padding: 6px 12px; border-radius: 999px; font-weight: 700; font-size: 14px; }
+    .score-badge.low { background: #fff4ed; color: #ea580c; }
+    .btn-view { text-decoration: none; background: linear-gradient(135deg, #FC5603, #FDA307); color: white; padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 14px; }
+    .btn-view:hover { filter: brightness(1.05); }
+    .btn-delete { background: none; border: none; color: #dc2626; cursor: pointer; font-size: 18px; padding: 4px; }
+    .btn-delete:hover { opacity: 0.7; }
+
+    /* Empty State */
+    .empty-state { text-align: center; color: #667085; padding: 40px 0; }
+    .empty-state a { color: #FC5603; font-weight: 600; text-decoration: none; }
+  </style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <div class="topbar">
+    <a href="/exam.html">
+      <img src="logo-mark.png" alt="" />
+      <div class="brand">QFwork<span>.ai</span></div>
+    </a>
+  </div>
+
+  <!-- Main Content -->
+  <div class="container">
+    
+    <!-- Go Back Button -->
+    <a href="/exam.html" class="back-link">← Back to Home</a>
+
+    <!-- 1. Account Tab -->
+    <div class="card">
+      <div class="card-header" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">
+        <div>
+          <h1>My Dashboard</h1>
+          <p class="subtitle">Logged in as <strong id="userEmail" style="color: #101828;">...</strong></p>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <a href="/settings.html" class="btn-action">Settings</a>
+          <button class="btn-action btn-logout" onclick="logout()">Logout</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Reports Tab -->
+    <div class="card">
+      <div class="card-header">
+        <h1>My Reports</h1>
+      </div>
+      <div id="reportsList">
+        <p style="color: #667085;">Loading your reports...</p>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // 1. Check if the user is logged in
+    fetch('/api/auth/me')
+      .then(res => {
+        if (!res.ok) throw new Error('Not logged in');
+        return res.json();
+      })
+      .then(data => {
+        document.getElementById('userEmail').textContent = data.user.email;
+        // Show admin button if applicable
+        if (data.user.is_admin) {
+          window.location.href = '/admin.html';
+          return;
+        }
+        loadReports();
+      })
+      .catch(() => {
+        window.location.href = '/login.html';
+      });
+
+    // 2. Load the reports
+    function loadReports() {
+      fetch('/api/reports')
+        .then(res => res.json())
+        .then(data => {
+          const list = document.getElementById('reportsList');
+          
+          if (data.reports.length === 0) {
+            list.innerHTML = `
+              <div class="empty-state">
+                <p>You haven't completed any interviews yet.</p>
+                <a href="/exam.html">Start your first practice session →</a>
+              </div>
+            `;
+            return;
+          }
+
+          list.innerHTML = data.reports.map(r => {
+            const date = new Date(r.created_at).toLocaleDateString();
+            const scoreClass = r.overall_score < 70 ? 'score-badge low' : 'score-badge';
+            
+            return `
+              <div class="report-card">
+                <div>
+                  <p class="report-title">${r.scenario_title}</p>
+                  <p class="report-meta">Completed on ${date}</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 16px;">
+                  <span class="${scoreClass}">Score: ${r.overall_score}</span>
+                  <a href="/view-report.html?id=${r.id}" class="btn-view">View Report</a>
+                  <button onclick="deleteReport(${r.id})" class="btn-delete" title="Delete Report">🗑️</button>
+                </div>
+              </div>
+            `;
+          }).join('');
+        })
+        .catch(err => {
+          console.error(err);
+          document.getElementById('reportsList').innerHTML = '<p style="color: #dc2626;">Error loading reports. Please refresh.</p>';
+        });
+    }
+
+    // 3. Delete Report
+    async function deleteReport(id) {
+      if (!confirm("Are you sure you want to delete this report? This cannot be undone.")) return;
+      
+      try {
+        const res = await fetch(`/api/reports/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+          loadReports(); // Refresh the list
+        } else {
+          alert('Failed to delete report.');
+        }
+      } catch (err) {
+        alert('Network error.');
+      }
+    }
+
+    // 4. Logout
+    function logout() {
+      fetch('/api/auth/logout', { method: 'POST' })
+        .then(() => window.location.href = '/login.html');
+    }
+  </script>
+</body>
+</html>

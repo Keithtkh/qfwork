@@ -202,6 +202,12 @@
   textarea{ width:100%; min-height:84px; resize:vertical; border:1px solid var(--line); border-radius:12px; padding:12px 14px;
             font:inherit; color:var(--ink); background:#fcfdfd; }
   textarea:focus{ outline:none; border-color:var(--teal); box-shadow:0 0 0 3px rgba(13,122,111,.12); }
+  #salaryFields input[type="text"],
+  #salaryFields select{ width:100%; min-height:46px; border:1px solid var(--line); border-radius:12px; padding:11px 14px;
+                        font:inherit; color:var(--ink); background:#fcfdfd; margin-bottom:16px; }
+  #salaryFields input[type="text"]:focus,
+  #salaryFields select:focus{ outline:none; border-color:var(--teal); box-shadow:0 0 0 3px rgba(13,122,111,.12); }
+  #salaryFields .ex{ margin:-8px 2px 14px; }
   .ex{ color:var(--mut); font-size:12.5px; margin:8px 2px 0; }
   .brief-chips{ display:flex; flex-wrap:wrap; gap:8px; margin:0 0 18px; }
   .brief-chip{ border:1px solid var(--line); background:#fcfdfd; border-radius:999px; padding:8px 13px;
@@ -388,7 +394,10 @@
     <img class="logo" src="logo-mark.png" alt="QFwork" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'logo logo-fallback',textContent:'QF'}))" />
     <div class="brand">QFwork<span>.ai</span></div>
   </a>
-  <div class="right">AI Trainer for workplace communication</div>
+  <div class="right" id="auth-nav" style="display: flex; align-items: center; gap: 12px;">
+    <!-- JavaScript will inject the Login button or User Profile here -->
+    <a href="/login.html" class="btn-login" style="text-decoration: none; background: #FC5603; color: #fff; padding: 6px 14px; border-radius: 8px; font-weight: 600; font-size: 13px;">Log in</a>
+  </div>
 </div>
 
 <main>
@@ -547,10 +556,47 @@
       <textarea id="ctx" placeholder=""></textarea>
       <p class="ex" style="margin-bottom: 18px;" id="ctxHint">Please fill this in so the AI can tailor the conversation.</p>
 
+      <div id="salaryFields" style="display:none;">
+        <label class="fld" for="salaryCompany">Prospective company</label>
+        <input id="salaryCompany" type="text" maxlength="200" />
+        <p id="salaryCompanyError" class="ex" style="color:#dc2626;display:none;"></p>
+
+        <label class="fld" for="salaryIndustry">Industry</label>
+        <input id="salaryIndustry" type="text" maxlength="150" />
+        <p id="salaryIndustryError" class="ex" style="color:#dc2626;display:none;"></p>
+
+        <label class="fld" for="salaryRange">Salary range offered or expected <span>(optional)</span></label>
+        <input id="salaryRange" type="text" maxlength="120"
+         placeholder="e.g. HKD 60,000–75,000 per month" />
+
+        <label class="fld" for="previousSalary">Previous role salary</label>
+        <input id="previousSalary" type="text" maxlength="120"
+              placeholder="Include currency and pay period, e.g. HKD 55,000 per month" />
+        <p id="previousSalaryError" class="ex" style="color:#dc2626;display:none;"></p>
+
+        <label class="fld" for="hrAssertiveness">AI HR assertiveness</label>
+        <select id="hrAssertiveness">
+          <option value="">Select a level</option>
+          <option>Low</option>
+          <option>Medium</option>
+          <option>High</option>
+        </select>
+        <p id="hrAssertivenessError" class="ex" style="color:#dc2626;display:none;"></p>
+
+        <label class="fld" for="hrCooperativeness">AI HR cooperativeness</label>
+        <select id="hrCooperativeness">
+          <option value="">Select a level</option>
+          <option>Low</option>
+          <option>Medium</option>
+          <option>High</option>
+        </select>
+        <p id="hrCooperativenessError" class="ex" style="color:#dc2626;display:none;"></p>
+      </div>
+
       <div id="cvBlock">
         <label class="fld" for="cvFile" id="cvLabel">Upload your CV <span>(optional — .pdf, .doc, .docx, .txt, or .md)</span></label>
         <input type="file" id="cvFile" accept=".pdf,.doc,.docx,.txt,.md" />
-        <p class="ex">Your CV is used only for this session. It is never stored or shared. The AI will tailor its questions to your CV, and your report will assess how well you used it.</p>
+        <p class="ex" id="cvHint">Your CV is used only for this session. It is never stored or shared. The AI will tailor its questions to your CV, and your report will assess how well you used it.</p>
       </div>
 
       <div class="devnote">🎥 Next you'll check your camera and microphone. Your voice is recorded during the call and analysed for tone, pacing and clarity — it powers your feedback report and is discarded right after.</div>
@@ -671,11 +717,14 @@ const SCENARIOS = [
     title: "Salary Negotiation",
     icon: 'money',
     blurb: "You've got the offer. Negotiate the package with a manager who pushes back.",
-    ctxLabel: "Your role and the offer you received",
-    ctxPlaceholder: "e.g. Senior Engineer at a startup, offered HKD 65k/month. I want to negotiate up.",
+    ctxLabel: "Your role / job description",
+    ctxPlaceholder: "Paste the job description or describe the role you're negotiating for.",
     ctxRequired: true,
-    showCv: false,
-  },
+    showCv: true,
+    cvRequired: true,
+    salaryForm: true,
+    cvLabel: "Upload your CV",
+},
   {
     title: "Business Presentation",
     icon: 'present',
@@ -819,11 +868,16 @@ function openPrecall(s){
     ? "Please fill this in so the AI can tailor the conversation."
     : "Optional — leave it blank and the AI will ask at the start.";
 
-  // ── Show or hide the CV upload ──
+  // Show or hide salary-specific fields
+  $('salaryFields').style.display = s.salaryForm ? '' : 'none';
+
+  // Show or hide the CV upload
   $('cvBlock').style.display = s.showCv ? '' : 'none';
   if (s.showCv) {
-    $('cvLabel').innerHTML = (s.cvLabel || 'Upload your CV') +
-      ' <span>(optional — .pdf, .doc, .docx, .txt, or .md)</span>';
+    const requirement = s.cvRequired ? 'required' : 'optional';
+    $('cvLabel').innerHTML =
+      (s.cvLabel || 'Upload your CV') +
+      ` <span>(${requirement} — .pdf, .doc, .docx, .txt, or .md)</span>`;
   }
 
   // ── Scenario-specific topic briefs ──
@@ -900,38 +954,120 @@ let dev = { stream:null, ctx:null, raf:null };
 // Skip the first check screen to prevent replication
 // **************************
 
-// CV is read if it exists
-function startCall(){
-  QFAccess.require(async () => {
-    state.userContext = $('ctx').value;
+function setFieldError(inputId, errorId, message) {
+  $(inputId).style.borderColor = message ? '#dc2626' : '';
 
-    if (current && current.ctxRequired && !state.userContext.trim()) {
-      $('ctx').focus();
-      $('ctx').style.borderColor = '#dc2626';
-      $('ctxHint').textContent = 'This field is required for this scenario.';
-      $('ctxHint').style.color = '#dc2626';
-      return;
-    }
+  const error = $(errorId);
+  error.textContent = message;
+  error.style.display = message ? 'block' : 'none';
+}
+
+// CV is read if it exists
+function startCall() {
+  QFAccess.require(async () => {
+    state.userContext = $('ctx').value.trim();
+
+    // Reset any previous validation messages.
     $('ctx').style.borderColor = '';
     $('ctxHint').style.color = '';
+    $('cvHint').style.color = '';
+    $('cvHint').textContent =
+      'Your CV is used only for this session. It is never stored or shared. The AI will tailor its questions to your CV, and your report will assess how well you used it.';
 
-    // Read the CV if one was chosen
+    const isSalaryNegotiation = current?.salaryForm === true;
+    const invalidInputs = [];
+
+    if (current?.ctxRequired && !state.userContext) {
+      $('ctx').style.borderColor = '#dc2626';
+      $('ctxHint').textContent = 'Please provide the role or job description.';
+      $('ctxHint').style.color = '#dc2626';
+      invalidInputs.push('ctx');
+    }
+
+    state.salaryDetails = isSalaryNegotiation ? {
+      company: $('salaryCompany').value.trim(),
+      industry: $('salaryIndustry').value.trim(),
+      salaryRange: $('salaryRange').value.trim(),
+      previousSalary: $('previousSalary').value.trim(),
+      hrAssertiveness: $('hrAssertiveness').value,
+      hrCooperativeness: $('hrCooperativeness').value,
+    } : null;
+
+    if (isSalaryNegotiation) {
+      const requiredFields = [
+        ['salaryCompany', 'salaryCompanyError', state.salaryDetails.company,
+          'Please enter the prospective company.'],
+        ['salaryIndustry', 'salaryIndustryError', state.salaryDetails.industry,
+          'Please enter the industry.'],
+        ['previousSalary', 'previousSalaryError', state.salaryDetails.previousSalary,
+          'Please enter your previous role salary.'],
+      ];
+
+      for (const [inputId, errorId, value, message] of requiredFields) {
+        setFieldError(inputId, errorId, value ? '' : message);
+        if (!value) invalidInputs.push(inputId);
+      }
+
+      const allowedLevels = ['Low', 'Medium', 'High'];
+
+      for (const field of ['hrAssertiveness', 'hrCooperativeness']) {
+        const valid = allowedLevels.includes(state.salaryDetails[field]);
+
+        setFieldError(
+          field,
+          `${field}Error`,
+          valid ? '' : 'Please select Low, Medium, or High.'
+        );
+
+        if (!valid) invalidInputs.push(field);
+      }
+    }
+
+    if (invalidInputs.length) {
+      $(invalidInputs[0]).focus();
+      return;
+    }
+
+    // Extract the CV text. Salary Negotiation requires readable text;
+    // a selected file that cannot be read is not sufficient.
     state.cvText = '';
     const file = $('cvFile').files[0];
+
+    if (current?.cvRequired && !file) {
+      $('cvHint').textContent = 'Please upload a readable CV to continue.';
+      $('cvHint').style.color = '#dc2626';
+      $('cvFile').focus();
+      return;
+    }
+
     if (file) {
       try {
         const text = await extractCvText(file);
+
         if (!text.trim()) {
-          console.warn('CV file returned empty text (possibly a scanned PDF).');
-          state.cvText = '';
-        } else {
-          state.cvText = text.slice(0, 5000);
-          console.log('CV extracted:', state.cvText.length, 'chars');
+          throw new Error('No readable text found in the CV.');
         }
+
+        state.cvText = text.slice(0, 5000);
       } catch (e) {
         console.warn('Could not read CV:', e);
         state.cvText = '';
+
+        if (current?.cvRequired) {
+          $('cvHint').textContent =
+            'Could not extract text from this CV. Try a text-based PDF, DOCX, TXT, or MD file.';
+          $('cvHint').style.color = '#dc2626';
+          $('cvFile').focus();
+          return;
+        }
       }
+    }
+
+    if (current?.cvRequired && !state.cvText.trim()) {
+      $('cvHint').textContent = 'Please upload a readable CV to continue.';
+      $('cvHint').style.color = '#dc2626';
+      $('cvFile').focus();
+      return;
     }
 
     await joinCall();
@@ -1031,7 +1167,7 @@ async function joinCall(){
   try{
     const r = await fetch('/api/conversation', {
       method:'POST', headers:{'Content-Type':'application/json', ...QFAccess.headers()},
-      body: JSON.stringify({scenarioTitle: state.scenarioTitle, userContext: state.userContext || '', cvText: state.cvText || ''})
+      body: JSON.stringify({scenarioTitle: state.scenarioTitle, userContext: state.userContext || '', cvText: state.cvText || '',salaryDetails: state.salaryDetails})
     });
     const data = await r.json();
     if(r.status === 401) return QFAccess.expired();
@@ -1104,6 +1240,7 @@ async function endCall(reason){
     // 2) request the full feedback report
     const r = await fetch('/api/interview-feedback', {
       method:'POST', headers:{'Content-Type':'application/json', ...QFAccess.headers()},
+      credentials:'same-origin',
       body: JSON.stringify({
         conversationId: state.conversationId,
         scenarioTitle: state.scenarioTitle,
@@ -1272,6 +1409,13 @@ function renderFeedback(f, voiceStats, tier, locked){
       ? 'This report combines the conversation transcript, real acoustic analysis of your recorded voice (pitch, pacing, clarity, energy) and live camera observations.'
       : 'Voice audio wasn’t captured for this call, so delivery notes are inferred from the transcript’s word patterns. Allow microphone access on this page to unlock measured tone, pacing and clarity feedback.'}</p>
     ${bookingCta(bookUrl, gated ? 'gated' : 'full')}
+    <div id="save-report-banner" style="margin-top: 20px; padding: 15px; border-radius: 12px; display: none; align-items: center; justify-content: space-between; background: #fff4ed; border: 1px solid #FC5603;">
+      <div style="color: #101828; font-weight: 500;">Want to keep this report? Log in to save it to your dashboard.</div>
+      <a href="/login.html" style="background: #FC5603; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">Log in to save</a>
+    </div>
+    <div id="saved-report-banner" style="margin-top: 20px; padding: 15px; border-radius: 12px; display: none; align-items: center; background: #e9f6f4; border: 1px solid #0d7a6f; color: #0d7a6f; font-weight: 600;">
+      ✓ This report has been saved to your dashboard.
+    </div>
     <div class="fb-actions">
       <button class="btn btn-primary" style="width:auto;" onclick="location.reload()">Practise again</button>
       ${gated ? '' : `<button class="btn btn-secondary" onclick="downloadReport()">
@@ -1285,6 +1429,17 @@ function renderFeedback(f, voiceStats, tier, locked){
       <span class="fb-saved" id="fbSaved" hidden>Saved to your device</span>
     </div>
   `;
+  // Check if user is logged in to show the save banner
+  fetch('/api/auth/me').then(res => {
+    if (res.ok) {
+      document.getElementById('saved-report-banner').style.display = 'flex';
+    } else {
+      document.getElementById('save-report-banner').style.display = 'flex';
+    }
+  }).catch(() => {
+    document.getElementById('save-report-banner').style.display = 'flex';
+  });
+
   show('fb');
 }
 
@@ -1376,7 +1531,9 @@ function metric(label,v){
 const previewParams = new URLSearchParams(location.search);
 if (previewParams.get('demo') === 'feedback') {
   const previewTier = previewParams.get('tier') === 'sales' ? 'sales' : 'demo';
-  document.addEventListener('qf-access-granted', () => renderPreview(previewTier));
+  //document.addEventListener('qf-access-granted', () => renderPreview(previewTier));
+  // Instantly render the sample report, bypassing the gate
+  renderPreview(previewTier);
 }
 function renderPreview(previewTier){
   state.scenarioTitle = 'Job Interview';
@@ -1439,6 +1596,32 @@ function renderPreview(previewTier){
   };
   renderFeedback(held, sampleStats, 'sales', ['detail','presence','voice','corrections','model']);
 }
+// --- AUTH NAVIGATION CHECK ---
+async function checkAuthNav() {
+  try {
+    const res = await fetch('/api/auth/me');
+    const nav = document.getElementById('auth-nav');
+    
+    if (res.ok) {
+      const data = await res.json();
+      // User is logged in: Show a link to the dashboard
+      nav.innerHTML = `
+        <a href="/dashboard.html" style="text-decoration: none; color: #101828; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+          <div style="width: 28px; height: 28px; background: #e9f6f4; color: #0d7a6f; border-radius: 50%; display: grid; place-items: center; font-weight: 700;">
+            ${data.user.email[0].toUpperCase()}
+          </div>
+          My Dashboard
+        </a>
+      `;
+    } else {
+      // User is not logged in: Show the Login button
+      nav.innerHTML = `<a href="/login.html" style="text-decoration: none; background: #FC5603; color: #fff; padding: 6px 14px; border-radius: 8px; font-weight: 600; font-size: 13px;">Log in</a>`;
+    }
+  } catch (e) {
+    console.log('Auth check failed');
+  }
+}
+checkAuthNav();
 </script>
 </body>
 </html>

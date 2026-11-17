@@ -1,10 +1,11 @@
 // ============================================================
 // One-time Tavus setup — run:  node setup-tavus.js
 // ------------------------------------------------------------
-// Creates BOTH QFwork personas and lists stock REPLICA faces,
+// Creates QFwork role-play personas and lists stock REPLICA faces,
 // then prints the ids to paste into your .env:
 //   TAVUS_PERSONA_ID=...               (interviewer — most scenarios)
 //   TAVUS_PRESENTATION_PERSONA_ID=...  (executive audience — Business Presentation)
+//   TAVUS_SALARY_PERSONA_ID=...        (active HR negotiator — Salary Negotiation)
 //   TAVUS_REPLICA_ID=...
 // Requires TAVUS_API_KEY in .env first. Safe to re-run: existing
 // personas with the same names are reused, not duplicated.
@@ -56,6 +57,29 @@ const PERSONAS = [
         'on what the candidate actually says. The specific situation and your opening line are provided per conversation. ' +
         'Never break character, and never give feedback, corrections or scores during the conversation — that happens afterwards.',
       context: 'QFwork.ai helps Hong Kong professionals practise workplace English through realistic spoken role-play.',
+      pipeline_mode: 'full',
+      layers: {
+        perception: PERCEPTION,
+        tts: TTS,
+        llm: LLM,
+        stt:  { stt_engine: 'tavus-advanced', participant_pause_sensitivity: 'medium',
+                participant_interrupt_sensitivity: 'medium', smart_turn_detection: true },
+        conversational_flow: { turn_detection_model: 'sparrow-1', turn_taking_patience: 'medium',
+                               replica_interruptibility: 'medium', voice_isolation: 'near' }
+      }
+    }
+  },
+  {
+    envVar: 'TAVUS_SALARY_PERSONA_ID',
+    body: {
+      persona_name: 'QFwork Salary Negotiator',
+      system_prompt:
+        'You are a professional HR representative in a live salary negotiation practice for QFwork.ai. ' +
+        'Keep the negotiation active: respond to the candidate’s latest point and advance the discussion with a focused follow-up, a clear position, or a relevant compensation trade-off. ' +
+        'Do not give bare acknowledgements, repeat questions, leave the conversation hanging, or treat one answer as the end. ' +
+        'Follow the per-conversation instructions for the negotiation stages and requested assertiveness and cooperativeness. ' +
+        'Ask one focused question at a time, keep turns short and natural, and never give coaching or scores during the call.',
+      context: 'QFwork.ai helps professionals practise workplace English through realistic spoken role-play.',
       pipeline_mode: 'full',
       layers: {
         perception: PERCEPTION,

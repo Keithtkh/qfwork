@@ -28,6 +28,13 @@ The report is assembled from three independent signals captured during a single 
 
 Voice metrics are measured from the waveform and from word-level speech timings, not inferred from text. The language model that writes the report receives these figures as data and is constrained from asserting acoustic detail that was not measured; if audio is unavailable, the report states so rather than estimating.
 
+## Core Features
+
+• Live AI Practice: Four professional scenarios with a live, face-to-face Tavus AI partner.
+• User Accounts & Dashboard: Secure registration, login, and a personal dashboard to view, revisit, and delete past interview reports.
+• Data Privacy: In-memory audio processing (never saved to disk) and account deletion options.
+• Hiring Flow: A private, token-gated AI interview flow for screening candidates.
+
 ## Practice scenarios
 
 | Scenario | Focus |
@@ -53,6 +60,7 @@ Each scenario carries its own grading rubric, so a fluent but strategically weak
 | Conversational video | Tavus Conversational Video Interface |
 | Language model | Groq — Llama 3.3 70B |
 | Speech-to-text | Groq — Whisper Large v3 Turbo |
+| Email | Any platform that supports transactional emails (like Brevo or Resend) |
 | Hosting | Any platform that runs a persistent Node process |
 
 The dependency list is deliberately small: `express`, `cors`, `dotenv` and `node-fetch`. Pitch tracking and loudness analysis are implemented directly rather than pulled from a library, which keeps the install lightweight and avoids native build steps at deploy time.
@@ -76,19 +84,18 @@ Speculative inference is enabled, allowing the language model to begin generatin
 ```
 Browser                          Server                        External services
 ───────                          ──────                        ─────────────────
+login/register ────────────────► POST /api/auth/login ───────► PostgreSQL (Session)
 scenario selection ────────────► POST /api/conversation ─────► Tavus: create session
-                                                          ◄─── session URL
 video session ◄──────────────────────────────────────────────► Tavus (WebRTC)
-microphone capture
-  (AudioWorklet → WAV)
 
-session ends ──────────────────► POST /api/voice-sample/:id
-                                   (held in memory only)
-               ────────────────► POST /api/interview-feedback
-                                   ├── Tavus: transcript + presence analysis
-                                   ├── Groq Whisper: word-level timings
-                                   ├── local DSP: pitch and loudness
+session ends ──────────────────► POST /api/interview-feedback
+                                   ├── Tavus: transcript + presence
+                                   ├── Groq Whisper: word timings
+                                   ├── local DSP: pitch/loudness
                                    └── Groq LLM: report generation
+                                        │
+                                        ▼
+                                   PostgreSQL (Save Report)
 report ◄─────────────────────────  structured JSON
 ```
 
@@ -100,6 +107,7 @@ Transcript and presence analysis are finalised asynchronously by Tavus after a s
 
 - **Credentials never reach the client.** The browser receives only a session URL. All API keys are read from the environment on the server.
 - **Audio is not persisted.** Recordings are held in server memory for the duration of the analysis and then discarded. Nothing is written to disk or to third-party storage.
+- **Security** Passwords are hashed with bcrypt. Sessions are stored in PostgreSQL to survive server restarts. Password resets and email changes require email verification.
 - **Every feedback layer is optional.** A failure in voice analysis or camera perception yields a smaller report rather than a failed request.
 - **Configuration is verified at startup.** The server checks that each persona carries its perception layer and repairs it if absent, since a missing layer otherwise fails silently.
 - **Session cost is bounded.** A hard per-session duration cap, plus automatic termination when a user abandons a session, prevents unbounded billing.
@@ -143,6 +151,14 @@ Set `CALENDLY_URL` to the booking link for that consultation. If it is unset the
 
 `TAVUS_MAX_CALL_SECONDS` (default `300`) caps a session at five minutes, enforced in two places: Tavus terminates the conversation server-side, and the in-call countdown ends the session and loads the report. The countdown is computed from the wall clock on each tick rather than by counting intervals, so a backgrounded tab — where browsers throttle timers — still cuts off on schedule.
 
+## Hiring Flow
+ 
+QFwork.ai includes a private, token-gated hiring flow.
+• Access: Requires a unique HIRING_TOKENS code (e.g., QFHIRE-a1b2c3) passed via URL (/hire.html?token=...). Tokens are single-use by default, unless it is the HIRING_TEST_TOKEN.
+• Interview: Conducts a specialized marketing screening interview with the Tavus AI. Candidates can upload a CV (text extracted in-browser, passed to Tavus/Groq, but never saved to disk).
+• Reporting: Generates a hiring report via Groq and emails it to the manager (MANAGER_EMAIL), including the original CV as an attachment.
+• Zero Manual Work: Uses hiring-sessions.json to track used tokens.
+
 ## Getting started
 
 ### Prerequisites
@@ -150,6 +166,8 @@ Set `CALENDLY_URL` to the booking link for that consultation. If it is unset the
 - Node.js 18 or later
 - A [Groq](https://console.groq.com) API key
 - A [Tavus](https://tavus.io) API key
+- A Brevo / Resend API key (for emails)
+- A PostgreSQL database (Railway)
 
 > **Credentials.** All API keys are supplied through environment variables and are read only on the server. `.env` is git-ignored and is never committed; `.env.example` documents every variable the application expects. In deployment the same variables are set through the hosting platform rather than as a file.
 
@@ -168,7 +186,7 @@ Add your `GROQ_API_KEY` and `TAVUS_API_KEY` to `.env`, then provision the AI per
 npm run setup
 ```
 
-This creates both personas on your Tavus account and prints their ids along with the available replica faces. Copy `TAVUS_PERSONA_ID`, `TAVUS_PRESENTATION_PERSONA_ID` and `TAVUS_REPLICA_ID` into `.env`.
+This creates the interviewer, presentation, and salary-negotiation personas on your Tavus account and prints their ids along with the available replica faces. Copy `TAVUS_PERSONA_ID`, `TAVUS_PRESENTATION_PERSONA_ID`, `TAVUS_SALARY_PERSONA_ID`, and `TAVUS_REPLICA_ID` into `.env`.
 
 ### Running
 
@@ -200,6 +218,7 @@ Run `npm run check` at any time to verify that the configured personas belong to
 | `TAVUS_REPLICA_ID` | Yes | The AI partner's appearance |
 | `TAVUS_PERSONA_ID` | Yes | Interviewer behaviour and perception queries |
 | `TAVUS_PRESENTATION_PERSONA_ID` | Recommended | Presentation audience; falls back to the interviewer persona if unset |
+| `TAVUS_SALARY_PERSONA_ID` | Recommended | Salary negotiator persona; falls back to the interviewer persona if unset |
 | `TAVUS_MAX_CALL_SECONDS` | No | Per-session duration cap, default `300` |
 | `TAVUS_CALLBACK_URL` | No | Webhook endpoint for Tavus events |
 | `ACCESS_CODE_DEMO` | Yes¹ | Full-report access code |
@@ -207,11 +226,21 @@ Run `npm run check` at any time to verify that the configured personas belong to
 | `TRIAL_RUNS_DEMO` | No | Sessions per demo visitor; `0` or blank means unlimited |
 | `TRIAL_RUNS_SALES` | No | Sessions per sales visitor, default `1` |
 | `CALENDLY_URL` | Recommended | Free-consultation booking link; the card is hidden if unset |
+| `CALENDLY_URL` | Recommended | Pre-trial booking link |
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `SESSION_SECRET` | Yes | Secret for signing session cookies |
+| `BREVO_API_KEY` | Yes | For sending emails |
+| `BREVO_SENDER_EMAIL` | Yes | Verified Brevo sender address |
+| `MANAGER_EMAIL` | Yes | Where hiring reports are sent |
+| `HIRING_TOKENS` | Yes | Comma-separated list of private hiring tokens |
+| `HIRING_TEST_TOKEN` | No | A reusable test token for hiring |
+| `TAVUS_HIRE_PERSONA_ID` | Yes | Hiring AI persona ID |
+| `TAVUS_HIRE_MAX_SECONDS` | No | Hiring interview cap, default 600 |
 | `PORT` | No | Server port, default `3000`; set automatically by most hosts |
 
 ¹ At least one of the two access codes must be set. With neither, the trial is closed to every visitor and the server reports this at startup.
 
-Personas are bound to the Tavus account that created them. After changing `TAVUS_API_KEY`, re-run `npm run setup` and update both persona ids.
+Personas are bound to the Tavus account that created them. After changing `TAVUS_API_KEY`, re-run `npm run setup` and update the persona ids.
 
 ## Deployment
 
@@ -228,6 +257,9 @@ Any container or VM host is suitable. Deployment consists of:
 
 ```
 ├── server.js              Routes, scenario definitions, request orchestration
+├── db.js                  PostgreSQL connection and table initialization
+├── hiring.js              Private hiring flow routes and logic
+├── hiring-feedback.js     Groq prompt specifically for hiring evaluation
 ├── feedback.js            Grading rubrics and report generation
 ├── voice-metrics.js       Pitch and loudness DSP, speech timing, clarity scoring
 ├── tavus.js               Conversational video API client, transcript extraction
@@ -237,6 +269,13 @@ Any container or VM host is suitable. Deployment consists of:
 └── public/
     ├── exam.html          Main application interface
     ├── index.html         Text-based practice mode
+    ├── login.html         Login/Register UI
+    ├── dashboard.html     User's past reports
+    ├── settings.html      Change email/password, delete account
+    ├── view-report.html   Display a specific past report
+    ├── hire.html          Candidate hiring UI
+    ├── book.html          Calendly trial booking
+    ├── reset-password.html Forgot password flow
     ├── access-gate.js     Access-code modal shared by both pages (opens on first gated click)
     ├── pcm-worklet.js     Audio capture worklet
     ├── img/               Landing-page photography (placeholders — see below)
@@ -272,6 +311,13 @@ Endpoints marked **gated** require the `X-QF-Access` header carrying a session t
 | `POST /api/abandon` | — | End an abandoned session |
 | `POST /api/analyze` | Yes | Text-only feedback, used by the text practice mode |
 | `GET /health` | — | Liveness probe |
+| `POST /api/auth/register` | — | Create a new account |
+| `POST /api/auth/login` | — | Log in |
+| `POST /api/auth/logout` | — | Log out |
+| `GET /api/auth/me` | — | Check current session |
+| `GET /api/reports` | Yes | Fetch past reports |
+| `DELETE /api/reports/:id` | Yes | Delete a report |
+| `POST /api/hire/start` | — | Start a hiring interview (token gated) |
 
 `/api/access` is rate-limited to eight attempts per IP per minute. `/api/abandon` is deliberately ungated: it only ever stops billing, and it is delivered by `sendBeacon`, which cannot set headers.
 

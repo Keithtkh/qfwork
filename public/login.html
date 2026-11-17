@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login / Register - QFwork.ai</title>
+  <link rel="icon" href="logo-mark.png" />
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f6f8fa; color: #101828; margin: 0; padding: 0; min-height: 100vh; display: flex; flex-direction: column; }
+    
+    /* Top Bar */
+    .topbar { background: #fff; border-bottom: 1px solid #e7eaee; padding: 15px 26px; display: flex; align-items: center; gap: 11px; }
+    .topbar a { display: flex; align-items: center; gap: 11px; text-decoration: none; color: inherit; }
+    .topbar img { width: 34px; height: 34px; }
+    .brand { font-weight: 700; font-size: 16px; color: #101828; }
+    .brand span { color: #FC5603; }
+
+    /* Main Container */
+    .main-content { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 40px 20px; }
+    
+    /* Wrapper for the back button and card */
+    .login-wrapper { width: 100%; max-width: 360px; }
+    
+    /* Go Back Button */
+    .back-link { display: inline-block; margin-bottom: 20px; color: #667085; font-size: 14px; font-weight: 600; text-decoration: none; transition: 0.2s; }
+    .back-link:hover { color: #FC5603; }
+
+    /* Card */
+    .card { background: #fff; padding: 30px; border-radius: 16px; border: 1px solid #e7eaee; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    h2 { margin-top: 0; margin-bottom: 20px; color: #101828; text-align: center; font-size: 22px; }
+    
+    /* Inputs */
+    input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #e7eaee; border-radius: 8px; box-sizing: border-box; font-family: inherit; font-size: 15px; transition: 0.2s; }
+    input:focus { outline: none; border-color: #FC5603; box-shadow: 0 0 0 3px rgba(252,86,3,0.1); }
+    
+    /* Buttons */
+    button { width: 100%; padding: 12px; border: 0; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 10px; font-family: inherit; font-size: 15px; transition: 0.2s; }
+    .btn-primary { background: linear-gradient(135deg, #FC5603, #FDA307); color: white; }
+    .btn-primary:hover { filter: brightness(1.05); }
+    .btn-link { background: none; color: #FC5603; text-decoration: underline; margin-top: 15px; font-size: 14px; }
+    .btn-link:hover { color: #E04B00; }
+    
+    /* Messages */
+    .msg { font-size: 13px; margin-top: 10px; text-align: center; line-height: 1.4; font-weight: 500; }
+    .msg.error { color: #dc2626; }
+    .msg.success { color: #15803d; }
+    
+    /* Resend Box */
+    .resend-box { display: none; margin-top: 15px; text-align: center; border-top: 1px solid #e7eaee; padding-top: 15px; }
+    .resend-box p { font-size: 13px; color: #667085; margin: 0 0 8px 0; }
+    .resend-box button { margin-top: 0; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <div class="topbar">
+    <a href="/exam.html">
+      <img src="logo-mark.png" alt="" />
+      <div class="brand">QFwork<span>.ai</span></div>
+    </a>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="login-wrapper">
+      
+      <!-- Go Back Button -->
+      <a href="/exam.html" class="back-link">← Back to Home</a>
+
+      <div class="card">
+        <h2 id="title">Welcome Back</h2>
+        
+        <input type="email" id="email" placeholder="Email" required />
+        <input type="password" id="password" placeholder="Password" required />
+        
+        <button id="submitBtn" class="btn-primary" onclick="submitForm()">Login</button>
+        <button class="btn-link" id="toggleBtn" onclick="toggleMode()">Need an account? Register</button>
+        <button class="btn-link" id="forgotBtn" onclick="showForgot()" style="margin-top: 5px; font-size: 13px; color: #667085;">Forgot password?</button>
+        
+        <div id="msgBox" class="msg"></div>
+
+        <div id="resendBox" class="resend-box">
+          <p>Didn't receive the verification email?</p>
+          <button class="btn-link" onclick="resendVerification()">Resend Verification Email</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    let isLogin = true;
+    let currentEmail = '';
+
+    // Check if user just clicked a verification link
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('verified') === 'true') {
+      showMsg('Email verified successfully! You can now log in.', 'success');
+    }
+
+    function toggleMode() {
+      isLogin = !isLogin;
+      document.getElementById('title').textContent = isLogin ? 'Welcome Back' : 'Create Account';
+      document.getElementById('submitBtn').textContent = isLogin ? 'Login' : 'Register';
+      document.getElementById('toggleBtn').textContent = isLogin ? 'Need an account? Register' : 'Already have an account? Login';
+      clearMsg();
+      document.getElementById('resendBox').style.display = 'none';
+    }
+
+    function showMsg(text, type = 'error') {
+      const box = document.getElementById('msgBox');
+      box.textContent = text;
+      box.className = `msg ${type}`;
+    }
+
+    function clearMsg() {
+      document.getElementById('msgBox').textContent = '';
+      document.getElementById('msgBox').className = 'msg';
+    }
+
+    async function submitForm() {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      currentEmail = email;
+
+      clearMsg();
+      document.getElementById('resendBox').style.display = 'none';
+
+      if (!email || !password) {
+        return showMsg('Please fill in all fields.', 'error');
+      }
+
+      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
+      
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        
+        if (!res.ok) {
+          if (data.error === 'UNVERIFIED_EMAIL') {
+            showMsg(data.message, 'error');
+            document.getElementById('resendBox').style.display = 'block';
+            return;
+          }
+          throw new Error(data.error || 'Something went wrong');
+        }
+        
+        if (!isLogin) {
+          showMsg('Registration successful! Please check your email to verify your account.', 'success');
+          document.getElementById('resendBox').style.display = 'block';
+        } else {
+          // Check if the user is an admin based on the response from the login API
+          if (data.user && data.user.is_admin) {
+            window.location.href = '/admin.html';
+          } else {
+            window.location.href = '/dashboard.html';
+          }
+        }
+      } catch (err) {
+        showMsg(err.message, 'error');
+      }
+    }
+
+    async function resendVerification() {
+      if (!currentEmail) return;
+      
+      const btn = event.target;
+      btn.textContent = 'Sending...';
+      
+      try {
+        const res = await fetch('/api/auth/resend-verification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: currentEmail })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+          showMsg(data.message || 'Verification email sent!', 'success');
+          document.getElementById('resendBox').style.display = 'none';
+        } else {
+          showMsg(data.error || 'Failed to resend email.', 'error');
+        }
+      } catch (err) {
+        showMsg('Network error. Please try again.', 'error');
+      } finally {
+        btn.textContent = 'Resend Verification Email';
+      }
+    }
+
+    function showForgot() {
+      const email = prompt("Enter your email address to receive a password reset link:");
+      if (!email) return;
+  
+      fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      }).then(res => res.json()).then(data => {
+        alert(data.message || 'If an account exists, a reset link was sent.');
+      }).catch(() => alert('Network error.'));
+    }
+  </script>
+</body>
+</html>
