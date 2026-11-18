@@ -860,6 +860,24 @@ function openPrecall(s){
   $('pcBrief').textContent = s.blurb;
   $('ctx').value = '';
 
+  $('salaryCompany').value = '';
+  $('salaryIndustry').value = '';
+  $('salaryRange').value = '';
+  $('previousSalary').value = '';
+  $('hrAssertiveness').value = '';
+  $('hrCooperativeness').value = '';
+
+  for (const errorId of [
+    'salaryCompanyError',
+    'salaryIndustryError',
+    'previousSalaryError',
+    'hrAssertivenessError',
+    'hrCooperativenessError'
+  ]) {
+    $(errorId).textContent = '';
+    $(errorId).style.display = 'none';
+  }
+
   // ── Per-scenario context label, placeholder, and hint ──
   $('ctxLabel').innerHTML = (s.ctxLabel || 'Your context') +
     (s.ctxRequired ? ' <span>(please fill in)</span>' : ' <span>(optional)</span>');
@@ -868,16 +886,21 @@ function openPrecall(s){
     ? "Please fill this in so the AI can tailor the conversation."
     : "Optional — leave it blank and the AI will ask at the start.";
 
-  // Show or hide salary-specific fields
   $('salaryFields').style.display = s.salaryForm ? '' : 'none';
 
   // Show or hide the CV upload
   $('cvBlock').style.display = s.showCv ? '' : 'none';
   if (s.showCv) {
-    const requirement = s.cvRequired ? 'required' : 'optional';
+    const cvRequired = s.cvRequired && QFAccess.tier() !== 'demo';
+
+    const requirement = cvRequired ? 'required' : 'optional';
     $('cvLabel').innerHTML =
       (s.cvLabel || 'Upload your CV') +
       ` <span>(${requirement} — .pdf, .doc, .docx, .txt, or .md)</span>`;
+
+    $('cvHint').textContent = cvRequired
+      ? 'A readable CV is required for this scenario.'
+      : 'CV upload is optional for demo sessions.';
   }
 
   // ── Scenario-specific topic briefs ──
@@ -1033,7 +1056,9 @@ function startCall() {
     state.cvText = '';
     const file = $('cvFile').files[0];
 
-    if (current?.cvRequired && !file) {
+    const cvRequired = current?.cvRequired && QFAccess.tier() !== 'demo';
+
+    if (cvRequired && !file) {
       $('cvHint').textContent = 'Please upload a readable CV to continue.';
       $('cvHint').style.color = '#dc2626';
       $('cvFile').focus();
@@ -1053,7 +1078,7 @@ function startCall() {
         console.warn('Could not read CV:', e);
         state.cvText = '';
 
-        if (current?.cvRequired) {
+        if (cvRequired) {
           $('cvHint').textContent =
             'Could not extract text from this CV. Try a text-based PDF, DOCX, TXT, or MD file.';
           $('cvHint').style.color = '#dc2626';
@@ -1063,7 +1088,7 @@ function startCall() {
       }
     }
 
-    if (current?.cvRequired && !state.cvText.trim()) {
+    if (cvRequired && !state.cvText.trim()) {
       $('cvHint').textContent = 'Please upload a readable CV to continue.';
       $('cvHint').style.color = '#dc2626';
       $('cvFile').focus();
@@ -1240,18 +1265,39 @@ async function endCall(reason){
     // 2) request the full feedback report
     const r = await fetch('/api/interview-feedback', {
       method:'POST', headers:{'Content-Type':'application/json', ...QFAccess.headers()},
-      credentials:'same-origin',
       body: JSON.stringify({
         conversationId: state.conversationId,
         scenarioTitle: state.scenarioTitle,
         durationSeconds: Math.round((Date.now() - (state.callStart || Date.now())) / 1000)
       })
     });
-    const data = await r.json();
-    if(r.status === 401){ state.ending = false; return QFAccess.expired(); }
-    if(!r.ok) throw new Error(data.error || 'Could not generate feedback.');
-    state.conversationId = null;            // call fully finished — nothing to abandon
-    renderFeedback(data.feedback, data.voiceStats, data.tier, data.locked);
+    
+    if (r.status === 401) { state.ending = false; return QFAccess.expired(); }
+    const initialData = await r.json();
+    if (!r.ok) throw new Error(initialData.error || 'Could not start feedback generation.');
+
+    // 3) Poll for the result
+    let reportData = null;
+    for (let i = 0; i < 40; i++) { // Try for up to 2 minutes
+      await new Promise(resolve => setTimeout(resolve, 3000)); // wait 3s
+      const pollRes = await fetch(`/api/interview-feedback/status/${state.conversationId}`);
+      const pollData = await pollRes.json();
+      
+      if (pollData.status === 'done') {
+        reportData = pollData;
+        break;
+      }
+    }
+
+    if (!reportData) throw new Error('Report generation timed out. Please try again.');
+
+    state.conversationId = null;
+    renderFeedback(reportData.feedback, reportData.voiceStats, reportData.tier, reportData.locked);
+    //const data = await r.json();
+    //if(r.status === 401){ state.ending = false; return QFAccess.expired(); }
+    //if(!r.ok) throw new Error(data.error || 'Could not generate feedback.');
+    //state.conversationId = null;            // call fully finished — nothing to abandon
+    //renderFeedback(data.feedback, data.voiceStats, data.tier, data.locked);
   }catch(e){ showError(e.message); }
   finally{ state.ending = false; $('endBtn').disabled = false; }
 }
