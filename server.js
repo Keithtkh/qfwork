@@ -1013,6 +1013,29 @@ app.get('/api/admin/stats', async (req, res) => {
 // DELETE /api/reports/:id   — delete a report by ID (only if it belongs to the logged-in user)
 // ============================================================
 
+// --- SAVE A REPORT AFTER LOGIN ---
+app.post('/api/reports', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { scenarioTitle, reportJson } = req.body;
+  if (!scenarioTitle || !reportJson || typeof reportJson !== 'object') {
+    return res.status(400).json({ error: 'Missing report data' });
+  }
+
+  try {
+    const overallScore = Number(reportJson.overallScore) || 0;
+    const result = await pool.query(
+      'INSERT INTO reports (user_id, scenario_title, overall_score, report_json) VALUES ($1, $2, $3, $4) RETURNING id',
+      [req.session.userId, scenarioTitle, overallScore, reportJson]
+    );
+
+    return res.status(200).json({ ok: true, id: result.rows[0].id });
+  } catch (err) {
+    console.error('[db] Failed to save pending report:', err);
+    return res.status(500).json({ error: 'Failed to save report' });
+  }
+});
+
 // --- FETCH ALL REPORTS FOR LOGGED-IN USER ---
 app.get('/api/reports', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Unauthorized' });

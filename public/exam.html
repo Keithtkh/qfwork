@@ -1457,7 +1457,7 @@ function renderFeedback(f, voiceStats, tier, locked){
     ${bookingCta(bookUrl, gated ? 'gated' : 'full')}
     <div id="save-report-banner" style="margin-top: 20px; padding: 15px; border-radius: 12px; display: none; align-items: center; justify-content: space-between; background: #fff4ed; border: 1px solid #FC5603;">
       <div style="color: #101828; font-weight: 500;">Want to keep this report? Log in to save it to your dashboard.</div>
-      <a href="/login.html" style="background: #FC5603; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">Log in to save</a>
+      <a href="/login.html?return=/exam.html&amp;saveReport=1" style="background: #FC5603; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">Log in to save</a>
     </div>
     <div id="saved-report-banner" style="margin-top: 20px; padding: 15px; border-radius: 12px; display: none; align-items: center; background: #e9f6f4; border: 1px solid #0d7a6f; color: #0d7a6f; font-weight: 600;">
       ✓ This report has been saved to your dashboard.
@@ -1475,11 +1475,20 @@ function renderFeedback(f, voiceStats, tier, locked){
       <span class="fb-saved" id="fbSaved" hidden>Saved to your device</span>
     </div>
   `;
-  // Check if user is logged in to show the save banner
+  // Preserve an unauthenticated report and let login return to it.
   fetch('/api/auth/me').then(res => {
     if (res.ok) {
       document.getElementById('saved-report-banner').style.display = 'flex';
     } else {
+      try {
+        sessionStorage.setItem('qfPendingReport', JSON.stringify({
+          scenarioTitle: state.scenarioTitle || 'Practice Session',
+          reportJson: f,
+          voiceStats: voiceStats || null,
+          tier: tier || 'sales',
+          locked: Array.isArray(locked) ? locked : []
+        }));
+      } catch (_) {}
       document.getElementById('save-report-banner').style.display = 'flex';
     }
   }).catch(() => {
@@ -1642,6 +1651,42 @@ function renderPreview(previewTier){
   };
   renderFeedback(held, sampleStats, 'sales', ['detail','presence','voice','corrections','model']);
 }
+// --- PENDING REPORT HANDOFF AFTER LOGIN ---
+async function restorePendingReport() {
+  let pending;
+  try {
+    pending = JSON.parse(sessionStorage.getItem('qfPendingReport') || 'null');
+  } catch (_) {
+    pending = null;
+  }
+  if (!pending || !pending.reportJson) return;
+
+  try {
+    const saveRes = await fetch('/api/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        scenarioTitle: pending.scenarioTitle,
+        reportJson: pending.reportJson
+      })
+    });
+
+    if (!saveRes.ok) return;
+
+    sessionStorage.removeItem('qfPendingReport');
+    state.scenarioTitle = pending.scenarioTitle;
+    renderFeedback(
+      pending.reportJson,
+      pending.voiceStats,
+      pending.tier,
+      pending.locked
+    );
+  } catch (_) {
+    // Leave the pending report in sessionStorage so a later retry can save it.
+  }
+}
+
 // --- AUTH NAVIGATION CHECK ---
 async function checkAuthNav() {
   try {
@@ -1650,6 +1695,7 @@ async function checkAuthNav() {
     
     if (res.ok) {
       const data = await res.json();
+      await restorePendingReport();
       // User is logged in: Show a link to the dashboard
       nav.innerHTML = `
         <a href="/dashboard.html" style="text-decoration: none; color: #101828; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px;">

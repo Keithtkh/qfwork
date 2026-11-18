@@ -154,8 +154,15 @@
           showMsg('Registration successful! Please check your email to verify your account.', 'success');
           document.getElementById('resendBox').style.display = 'block';
         } else {
-          // Check if the user is an admin based on the response from the login API
-          if (data.user && data.user.is_admin) {
+          const params = new URLSearchParams(window.location.search);
+          const requestedReturn = params.get('return');
+          const safeReturn = requestedReturn && requestedReturn.startsWith('/') && !requestedReturn.startsWith('//')
+            ? requestedReturn
+            : null;
+
+          if (safeReturn) {
+            window.location.href = safeReturn;
+          } else if (data.user && data.user.is_admin) {
             window.location.href = '/admin.html';
           } else {
             window.location.href = '/dashboard.html';
